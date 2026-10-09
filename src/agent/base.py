@@ -2,7 +2,7 @@ from langchain.agents import create_agent
 # from langchain.tools import tools
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-class Agent:
+class BaseAgent:
     def __init__(self, model: str, temperature: int, system_prompt: str) -> None:
         self.system_prompt = system_prompt
         self.model_name = model
@@ -37,7 +37,7 @@ class Agent:
 
 
 def main():
-    a1 = Agent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant")
+    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant")
 
     print(a1)
 
