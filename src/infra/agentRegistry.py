@@ -7,6 +7,7 @@ import secrets
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+import socket
 
 from src.models import AgentInfo
 
@@ -42,6 +43,11 @@ class AgentRegistry:
         # HTTP server refrences
         self.http_server = None
         self.http_server_thread = None
+
+        # UDP server refrences
+        self.UDP_server = None
+        self.UDP_server_thread = None
+        self.stop_event = threading.Event()
 
         # HTTP endpoint configuration
         self.setup_routes()
@@ -89,8 +95,37 @@ class AgentRegistry:
             return{"agent amount": agent_amount}
 
     # heartbeat server
-    def start_udp_server(self):
-        pass
+    def udp_server(self):
+        UDP_HOST = "127.0.0.1"
+        UDP_PORT = 9000
+
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_server:
+            udp_server.bind((UDP_HOST, UDP_PORT))
+            udp_server.settimeout(0.5)
+
+            print(f"Server listening on {UDP_HOST}:{UDP_PORT}")
+
+            while not self.stop_event.is_set():
+                try: 
+                    data, address = udp_server.recvfrom(1024)
+                    message = data.decode("utf-8")
+                    print(f"Recieved  from {address}: {message}")
+                except socket.timeout:
+                    continue
+
+        print("UDP server stopped")
+
+    def start_udp_server_thread(self):
+        # preventing starting another udp server
+        if self.UDP_server_thread and self.UDP_server_thread.is_alive():
+            return
+
+        self.UDP_server_thread = threading.Thread(
+            target=self.udp_server,
+            daemon=True
+        )
+
+        self.UDP_server_thread.start()
 
     # registration server of agents
     def start_http_server(self):
@@ -110,27 +145,41 @@ class AgentRegistry:
         # run the server in a thread
         self.http_server_thread = threading.Thread(
             target=self.http_server.run,
-            # daemon=True
+            daemon=True
         )
 
         self.http_server_thread.start()
 
     def start(self):
         self.start_http_server()
-        self.start_udp_server()
+        self.start_udp_server_thread()
 
         print("Registry HTTP server starting")
 
     def stop(self):
-        if self.http_server is not None:
+        # stopping udp server
+        self.stop_event.set()
+
+        if self.http_server:
             self.http_server.should_exit = True
 
-        if self.http_server_thread is not None:
-            self.http_server_thread.join(timeout=5)
+        if self.http_server_thread:
+            self.http_server_thread.join()
+
+        if self.UDP_server_thread:
+            self.UDP_server_thread.join()
+
+        
 
 def main():
     test = AgentRegistry()
     test.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        AgentRegistry.stop()
 
 if __name__ == "__main__":
     main()

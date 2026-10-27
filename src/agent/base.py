@@ -4,6 +4,7 @@ from langchain.agents import create_agent
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from src.models import AgentInfo
 from dataclasses import asdict
+from .heartbeat import Heartbeat
 
 """
 BaseAgent: base agent class that difnies the base structure of agents. It is meant to be used as a parent class
@@ -13,6 +14,9 @@ BaseAgent: base agent class that difnies the base structure of agents. It is mea
         system_prompt: str = the prompt that is given to the model
         agent_id: int = unique id for each agent
         registry_url: str = http url where the registry http server lives
+
+    - register_agent(): sends an http message to the register server sending agents information
+    - communicate(prompt: str): communication handeling with the agent
 """
 
 class BaseAgent:
@@ -46,6 +50,10 @@ class BaseAgent:
 
         self.register_agent()
 
+        # call heartbeats
+        self.heartbeat = Heartbeat(agent_id = self.agent_info.agent_id, registry_host = "127.0.0.1", registry_port = 9000, interval = 1)
+        self.heartbeat.start()
+
     def __str__(self):
         return f"This is the base agent.\n Model: {self.agent_info.llm_model}\nTemperature: {self.agent_info.llm_temperature} \nSystem prompt: "
 
@@ -61,6 +69,9 @@ class BaseAgent:
         r.raise_for_status()
 
         return r.json()
+
+    def udp_server(self):
+        pass
 
     def communicate(self, prompt: str) -> str:
         response = self.agent.invoke(
@@ -78,7 +89,7 @@ class BaseAgent:
 
 
 def main():
-    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_id=1)
+    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_id=2)
 
     print(a1)
 
