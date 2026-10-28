@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 import socket
+from dataclasses import asdict
 
 from src.models import AgentInfo
 
@@ -57,15 +58,16 @@ class AgentRegistry:
 
         @self.app.post("/register")
         async def register(request: Request):
+            data = await request.json()
+            agent = AgentInfo(**data)
+
             with self.lock:
-                data = await request.json()
-                if data['agent_id'] in self.agents:
+                if agent.agent_id in self.agents:
                     raise HTTPException(
-                        status_code = 404,
+                        status_code = 409,
                         detail = "Agent already exists"
                     )
                 else:
-                    agent = AgentInfo(**data)
                     self.agent_amount += 1
                     self.agent_ids.append(agent.agent_id)
                     self.agents[agent.agent_id] = agent
@@ -92,7 +94,7 @@ class AgentRegistry:
             with self.lock:
                 agent_amount = self.agent_amount
 
-            return{"agent amount": agent_amount}
+            return{"agent_amount": agent_amount}
 
     # heartbeat server
     def udp_server(self):
@@ -172,14 +174,14 @@ class AgentRegistry:
         
 
 def main():
-    test = AgentRegistry()
-    test.start()
+    agent_registry = AgentRegistry()
+    agent_registry.start()
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        AgentRegistry.stop()
+        agent_registry.stop()
 
 if __name__ == "__main__":
     main()

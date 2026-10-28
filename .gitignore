@@ -1,4 +1,6 @@
 myenv/
 src/agent/__pycache__/
 Description.docx
-src/infra/__pycache__/agentRegistry.cpython-314.pyc
+src/infra/__pycache__/
+src/models/__pycache__/
+tests/__pycache__/
