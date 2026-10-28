@@ -89,7 +89,7 @@ class BaseAgent:
 
 
 def main():
-    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_id=2)
+    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_id=3)
 
     print(a1)
 
