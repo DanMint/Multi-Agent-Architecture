@@ -9,7 +9,7 @@
         - 'tests/test_registry.py'
         - '.github/workflows/registry-check.yml'
 
-    pull_requests:
+    pull_request:
       branches: [main, master]
       paths:
        - 'src/infra/agentRegistry.py'
