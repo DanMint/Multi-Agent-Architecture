@@ -1,0 +1,29 @@
+# this workflow checks that the registry works if it gets modified
+name: Agent registry check
+
+on: 
+  push:
+    branches: [main, master]
+  pull_requests:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-versions: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx uvicorn
+
+      - name: Run registry tests
+        run: python -m pytest tests/ -v
