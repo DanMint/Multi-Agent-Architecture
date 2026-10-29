@@ -12,7 +12,6 @@ from dataclasses import asdict
 
 from src.models import AgentInfo
 
-
 """
 AgentRegistry: registers new agents via HTTP and keeps track of current agents via UDP heartbeat signals
 
@@ -170,8 +169,6 @@ class AgentRegistry:
 
         if self.UDP_server_thread:
             self.UDP_server_thread.join()
-
-        
 
 def main():
     agent_registry = AgentRegistry()
