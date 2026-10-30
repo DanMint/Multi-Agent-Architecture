@@ -7,14 +7,14 @@ on:
     paths:
       - 'src/agent/base.py'
       - 'tests/test_base_agent.py'
-      - '.github/workflows/agent_registry_check.yaml'
+      - '.github/workflows/agent_base_check.yaml'
 
   pull_request:
     branches: [main, master]
     paths:
       - 'src/agent/base.py'
       - 'tests/test_base_agent.py'
-      - '.github/workflows/agent_registry_check.yaml'
+      - '.github/workflows/agent_base_check.yaml'
 
 jobs:
   test:
@@ -32,7 +32,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest fastapi httpx uvicorn
+          python -m pip install pytest fastapi httpx uvicorn langchain langchain-ollama
       
       - name: Run registry tests
         run: python -m pytest tests/test_base_agent.py -v
+        

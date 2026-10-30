@@ -36,3 +36,4 @@
 
         - name: Run registry tests
           run: python -m pytest tests/test_agent_registry.py -v
+          

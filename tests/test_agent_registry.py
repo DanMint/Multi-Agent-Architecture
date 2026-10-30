@@ -206,3 +206,4 @@ def test_udp_heartbeat(registry, capfd):
         registry.stop()
 
     assert not registry.UDP_server_thread.is_alive()
+    
