@@ -76,7 +76,7 @@ def agent(mock_dependencies):
     This test tests the following:
         1. testing agent meta data
         2. testing ollama constructor call
-        3. testing initialization of agent
+        3. testing  
 """
 def test_agent_initialization(agent, mock_dependencies):
     # testing agent metadata
