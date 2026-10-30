@@ -171,7 +171,6 @@ class AgentRegistry:
         if self.UDP_server_thread:
             self.UDP_server_thread.join()
 
-        
 
 def main():
     agent_registry = AgentRegistry()
