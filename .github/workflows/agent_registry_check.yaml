@@ -7,14 +7,14 @@
       paths:
         - 'src/infra/agentRegistry.py'
         - 'tests/test_registry.py'
-        - '.github/workflows/registry-check.yml'
+        - '.github/workflows/agent_registry_check.yaml'
 
     pull_request:
       branches: [main, master]
       paths:
        - 'src/infra/agentRegistry.py'
        - 'tests/test_registry.py'
-       - '.github/workflows/registry-check.yml'
+       - '.github/workflows/agent_registry_check.yaml'
 
   jobs:
     test:
@@ -35,4 +35,4 @@
             python -m pip install pytest fastapi httpx uvicorn
 
         - name: Run registry tests
-          run: python -m pytest tests/ -v
+          run: python -m pytest tests/test_agent_registry.py -v
