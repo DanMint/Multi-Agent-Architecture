@@ -12,7 +12,6 @@ from dataclasses import asdict
 
 from src.models import AgentInfo
 
-
 """
 AgentRegistry: registers new agents via HTTP and keeps track of current agents via UDP heartbeat signals
 
@@ -183,5 +182,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

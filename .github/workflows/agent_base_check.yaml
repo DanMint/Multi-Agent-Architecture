@@ -36,3 +36,4 @@ jobs:
       
       - name: Run registry tests
         run: python -m pytest tests/test_base_agent.py -v
+        

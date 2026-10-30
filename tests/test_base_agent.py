@@ -164,3 +164,4 @@ def test_registration_failure(mock_dependencies):
 
     # heartbeats should NOT start when registration fails
     mock_dependencies["heartbeat_class"].assert_not_called()
+    
