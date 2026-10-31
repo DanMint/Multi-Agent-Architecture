@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 import socket
 from dataclasses import asdict
 
-from src.models import AgentInfo
+from src.models.agent_info import AgentInfo
 
 """
 AgentRegistry: registers new agents via HTTP and keeps track of current agents via UDP heartbeat signals
@@ -97,7 +97,7 @@ class AgentRegistry:
 
     # heartbeat server
     def udp_server(self):
-        UDP_HOST = "127.0.0.1"
+        UDP_HOST = "0.0.0.0"
         UDP_PORT = 9000
 
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_server:
@@ -136,7 +136,7 @@ class AgentRegistry:
 
         config = uvicorn.Config(
             self.app,
-            host="127.0.0.1",
+            host="0.0.0.0",
             port=8000,
             log_level="info"
         )
