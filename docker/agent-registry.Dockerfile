@@ -3,7 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # installing registry dependencies
-RUN pip install --no-cache-dir fastapi uvicorn pydantic
+COPY docker/requirements/agent-registry.txt ./agent-registry.txt
+RUN pip install --no-cache-dir -r ./agent-registry.txt
 
 # copying agentRegistry
 COPY src/infra/agentRegistry.py ./src/infra/agentRegistry.py
