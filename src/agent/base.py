@@ -2,7 +2,7 @@ import httpx
 from langchain.agents import create_agent
 # from langchain.tools import tools
 from langchain_ollama import ChatOllama, OllamaEmbeddings
-from src.models import AgentInfo
+from src.models.agent_info import AgentInfo
 from dataclasses import asdict
 from .heartbeat import Heartbeat
 
