@@ -1,0 +1,37 @@
+name: Websearch aagent check
+
+on: 
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/agent/CustomAgents/webSearchAgent/webSearchAgent.py'
+      - 'tests/test_webSearch_agent.py'
+      - '.github/workflows/websearch_agent-check.yaml'
+  
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'src/agent/CustomAgents/webSearchAgent/webSearchAgent.py'
+      - 'tests/test_webSearch_agent.py'
+      - '.github/workflows/websearch_agent-check.yaml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check code
+        uses: actions/checkout@v4
+
+      - name: set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "langchain[mcp]>=1.4.0" langchain-ollama fastmcp ddgs trafilatura httpx pytest pytest-asyncio
+
+      - name: Web search tests
+        run: python -m pytest tests/test_webSearch_agent.py -v
