@@ -94,6 +94,7 @@ def test_agent_initialization(agent, mock_dependencies):
     # testing initialization of agent
     mock_dependencies["create_agent"].assert_called_once_with(
         model=mock_dependencies["model"],
+        tools = [],
         system_prompt="You are a helpful assistant"
     )
 
@@ -151,8 +152,8 @@ def test_registration_failure(mock_dependencies):
                 "POST", "http://127.0.0.1:8000/register"
             ),
             response=httpx.Response(500)
+        )
     )
-)
 
     with pytest.raises(httpx.HTTPStatusError):
         BaseAgent(

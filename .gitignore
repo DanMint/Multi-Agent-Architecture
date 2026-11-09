@@ -5,3 +5,5 @@ src/infra/__pycache__/
 src/models/__pycache__/
 tests/__pycache__/
 docker-commands.txt
+src\agent\Custom-Agents\webSearchAgent\__pycache__
+src/agent/CustomAgents/webSearchAgent/__pycache__

@@ -38,13 +38,14 @@ class BaseAgent:
             max_concurrent_tasks=None
         )
 
-        model = ChatOllama(
+        self.llm = ChatOllama(
             model = self.agent_info.llm_model,
             temperature = self.agent_info.llm_temperature
         )
 
         self.agent = create_agent(
-            model = model,
+            model = self.llm,
+            tools = [],
             system_prompt = self.agent_info.agent_system_prompt
         )
 
