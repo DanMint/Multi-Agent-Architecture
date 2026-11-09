@@ -18,6 +18,7 @@ on:
 
 jobs:
   test:
+    name: Base-agent-check
     runs-on: ubuntu-latest
 
     steps:

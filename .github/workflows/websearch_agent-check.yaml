@@ -17,6 +17,7 @@ on:
 
 jobs:
   test:
+    name: Web-search-agent-check
     runs-on: ubuntu-latest
 
     steps:
