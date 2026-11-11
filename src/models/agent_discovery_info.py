@@ -62,4 +62,4 @@ class AgentDiscoveryInfo(BaseModel):
 
     # Runtime availability
     status: Literal["healthy"]
-    max_concurrent_tasks: int = Field(ge=1)
+    max_concurrent_tasks: int | None

@@ -104,6 +104,7 @@ class AgentInfo(BaseModel):
     llm_temperature: int
     system_prompt: str
     agent_prompt: str
+    agent_card_url: str | None
 
     # registry information
     registry_url: str

@@ -37,5 +37,5 @@ class AgentRegistration(BaseModel):
     agent_card_url: AnyHttpUrl | None
 
     # capacity
-    max_concurrent_tasks: int = Field(default=1, ge=1) | None
+    max_concurrent_tasks: int | None
 
