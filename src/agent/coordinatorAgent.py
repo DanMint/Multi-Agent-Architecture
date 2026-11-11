@@ -30,7 +30,7 @@ class TaskAssignment(BaseModel):
 class CoordinatorAgent(BaseAgent):
     def __init__(self, model: str, system_prompt: str, agent_prompt: str, agent_id: int, temperature: float = 0.0, workers: dict[str, Any] | None = None):
         print(f"Agent id: {agent_id}")
-        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id,create_agent=False)
+        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id, coordinator=True)
         # Available worker agents
         self.workers = workers or {}
 

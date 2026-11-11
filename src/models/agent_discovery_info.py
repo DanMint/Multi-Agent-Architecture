@@ -54,11 +54,11 @@ Note:
 class AgentDiscoveryInfo(BaseModel):
     # Identity
     agent_id: int
-    name: str
+    name: str | None
 
-    # A2A discovery
-    skills: list[str]
-    agent_card_url: AnyHttpUrl
+    # # A2A discovery
+    # skills: list[str]
+    # agent_card_url: AnyHttpUrl
 
     # Runtime availability
     status: Literal["healthy"]

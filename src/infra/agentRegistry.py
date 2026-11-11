@@ -12,6 +12,10 @@ from dataclasses import asdict
 import copy
 
 from src.models.agent_info import AgentInfo
+from src.models.agent_registration import AgentRegistration
+from src.models.registry_agent_record import RegistryAgentRecord
+from src.models.agent_discovery_info import AgentDiscoveryInfo
+
 
 """
 AgentRegistry: registers new agents via HTTP and keeps track of current agents via UDP heartbeat signals
@@ -33,7 +37,7 @@ class AgentRegistry:
         # information about agents
         self.agent_amount : int = 0
         self.agent_ids : list[int] = []
-        self.agents : dict[AgentInfo] = {}
+        self.agents : dict[int, RegistryAgentRecord] = {}
 
         # shared data protection
         self.lock = threading.Lock()
@@ -56,25 +60,30 @@ class AgentRegistry:
     # Tells FastAPI which HTTP endpoints exists and how to handle them
     def setup_routes(self):
 
-        @self.app.post("/register")
-        async def register(agent: AgentInfo):
+        @self.app.post("/register", status_code=201)
+        async def register(registration: AgentRegistration):
             with self.lock:
-                if agent.agent_id in self.agents:
-                    print(f"REGISTRY: recieved agent id: {agent.agent_id}")
+                if registration.agent_id in self.agents:
                     raise HTTPException(
-                        status_code = 409,
-                        detail = "Agent already exists"
+                        status_code=409,
+                        detail="Agent already exists"
                     )
-                else:
-                    self.agent_amount += 1
-                    self.agent_ids.append(agent.agent_id)
-                    print(f"REGISTRY: recieved agent id: {agent.agent_id}")
-                    self.agents[agent.agent_id] = agent
 
-            print(f"REGISTRY: received agent id: {agent.agent_id}")
+                # create internal registry record
+                record = RegistryAgentRecord(registration=registration)
 
-            return {"message": "Agent registered"}
+                self.agents[registration.agent_id] = record
+                self.agent_amount += 1
+                self.agent_ids.append(registration.agent_id)
 
+            print(f"REGISTRY: registered agent: {record.registration.agent_id}")
+
+            return {
+                    "message": "Agent registered",
+                    "session_id": record.session_id,
+                    "status": record.status
+                }
+        
         @self.app.get("/agent/id")
         def get_agent(agent_id: int):
             agent_info = None
@@ -103,13 +112,18 @@ class AgentRegistry:
             all_agents = None
 
             with self.lock:
-                if self.agents:
-                    all_agents = {
-                        agent_id: agent.model_copy(deep=True)
-                        for agent_id, agent in self.agents.items()
-                    }
+                avilable_agents = None
+                avilable_agents = [
+                    AgentDiscoveryInfo(
+                        agent_id=agent.agent_id,
+                        status = agent.status,
+                    )
 
-            return{"agents": all_agents}
+                    for agent in self.agents.values()
+                    if agent.status == "active"
+                ]
+
+            return{avilable_agents}
                     
     # heartbeat server
     def udp_server(self):

@@ -7,7 +7,7 @@ from langchain.agents import create_agent
 class ResearchAgent(BaseAgent):
     def __init__(self, model: str, temperature: str, agent_id: int, system_prompt : str ="You are a worker agent. Listen to the coordinator", agnet_prompt:str = "..."):
         print(f"Agent id: {agent_id}")
-        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agnet_prompt, agent_id=agent_id, create_agent=False)
+        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agnet_prompt, agent_id=agent_id, coordinator=False)
 
         self.MCP_server = "http://127.0.0.1:8001/mcp"
         self.tools = []
