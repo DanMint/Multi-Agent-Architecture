@@ -9,16 +9,45 @@ from src.models.agent_registration import AgentRegistration
 from .heartbeat import Heartbeat
 
 """
-BaseAgent: base agent class that difnies the base structure of agents. It is meant to be used as a parent class
-    passed parameters:
-        model: str =  the type of LLM model that the agent will use
-        temperature: str = the temperature 
-        system_prompt: str = the prompt that is given to the model
-        agent_id: int = unique id for each agent
-        registry_url: str = http url where the registry http server lives
+BaseAgent: Base class defining the common structure and functionality of agents
+in the multi-agent architecture. Intended to be inherited by specialized agents.
 
-    - register_agent(): sends an http message to the register server sending agents information
-    - communicate(prompt: str): communication handeling with the agent
+Parameters:
+    model (str): Name of the LLM model used by the agent (e.g., llama3.1:8b).
+    temperature (int): Temperature setting controlling the LLM's randomness.
+    system_prompt (str): System instructions defining the agent's behavior.
+    agent_prompt (str): Agent-specific prompt stored in AgentInfo.
+    agent_id (int): Unique identifier assigned to the agent.
+    registry_url (str): HTTP URL of the agent registry server.
+    coordinator (bool): If True, skips creation of the default LangChain agent.
+                        Defaults to False.
+
+Attributes:
+    agent_info (AgentInfo): Stores agent identification, configuration, registry
+                            endpoints, communication details, and runtime metadata.
+    llm (ChatOllama): Local Ollama language model instance.
+    agent: LangChain agent created using the configured LLM and system prompt.
+           Only initialized when coordinator=False.
+    heartbeat (Heartbeat): UDP heartbeat service used to notify the registry
+                           that the agent is active.
+
+Methods:
+    __init__(): Initializes agent information, LLM, LangChain agent, and heartbeat.
+
+    initialize(): Performs asynchronous initialization by registering the agent
+                  with the registry and starting the heartbeat service.
+                  Can be overridden by subclasses.
+
+    create(): Asynchronous factory method that creates an agent instance,
+              awaits initialization, and returns the initialized agent.
+
+    register_agent(agent_card_url: str): Asynchronously registers the agent with
+              the registry using HTTP POST and stores the assigned session ID.
+
+    communicate(prompt: str): Sends a user prompt to the LangChain agent
+              for asynchronous processing and returns the agent response.
+
+    __str__(): Returns a string representation of the agent configuration.
 """
 
 class BaseAgent:
@@ -122,7 +151,7 @@ class BaseAgent:
         print(f"Agent {self.agent_info.agent_id} registered successfully")
 
     async def communicate(self, prompt: str) -> str:
-        response = self.agent.ainvoke(
+        response = await self.agent.ainvoke(
             {
                 "messages": [
                     {
