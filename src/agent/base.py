@@ -32,7 +32,10 @@ class BaseAgent:
             agent_prompt=agent_prompt,
             # registry information
             registry_url=registry_url,
-            register_agent_url=registry_url + "register",
+            registry_register_agent_url=registry_url + "register",
+            registry_get_agent_by_id_url=registry_url + "agent/id",
+            registry_get_agent_amount_url=registry_url + "agent_amount",
+            registry_get_all_agents=registry_url + "get_all_agents",
             # agent to agent communication
             endpoint=None,
             # udp heartbeat listener
@@ -73,7 +76,7 @@ class BaseAgent:
 
         print("Sending:", payload)
             
-        r = httpx.post(self.agent_info.register_agent_url, json=payload, timeout=0.5)
+        r = httpx.post(self.agent_info.registry_register_agent_url, json=payload, timeout=0.5)
 
         r.raise_for_status()
 

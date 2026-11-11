@@ -34,7 +34,10 @@ class AgentInfo(BaseModel):
 
     # registry information
     registry_url: str
-    register_agent_url: str
+    registry_register_agent_url: str
+    registry_get_agent_by_id_url: str
+    registry_get_agent_amount_url: str
+    registry_get_all_agents: str
 
     # agent to agent communication
     endpoint: str | None

@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 import socket
 from dataclasses import asdict
+import copy
 
 from src.models.agent_info import AgentInfo
 
@@ -56,10 +57,7 @@ class AgentRegistry:
     def setup_routes(self):
 
         @self.app.post("/register")
-        async def register(request: Request):
-            data = await request.json()
-            agent = AgentInfo(**data)
-
+        async def register(agent: AgentInfo):
             with self.lock:
                 if agent.agent_id in self.agents:
                     print(f"REGISTRY: recieved agent id: {agent.agent_id}")
@@ -73,25 +71,27 @@ class AgentRegistry:
                     print(f"REGISTRY: recieved agent id: {agent.agent_id}")
                     self.agents[agent.agent_id] = agent
 
+            print(f"REGISTRY: received agent id: {agent.agent_id}")
+
             return {"message": "Agent registered"}
 
         @self.app.get("/agent/id")
         def get_agent(agent_id: int):
             agent_info = None
             with self.lock:
-                if agent_id in self.agents:
-                    agent_info = self.agents[agent_id]
-                else:
+                if agent_id not in self.agents:
                     raise HTTPException(
-                        status_code=404,
-                        detail="Agent does not exist"
-                    )
+                            status_code=404,
+                            detail="Agent does not exist"
+                        )
+                else:
+                    agent_info = self.agents[agent_id]
 
             return{"agent": agent_info}
 
         @self.app.get("/agent_amount")
         def get_amount_of_agents():
-            agent_amount:int
+            agent_amount = 0
             with self.lock:
                 agent_amount = self.agent_amount
 
@@ -101,12 +101,15 @@ class AgentRegistry:
         @self.app.get("/get_all_agents")
         def get_all_agents():
             all_agents = None
+
             with self.lock:
                 if self.agents:
-                    all_agents = self.agents.copy()
+                    all_agents = {
+                        agent_id: agent.model_copy(deep=True)
+                        for agent_id, agent in self.agents.items()
+                    }
 
             return{"agents": all_agents}
-                    
                     
     # heartbeat server
     def udp_server(self):

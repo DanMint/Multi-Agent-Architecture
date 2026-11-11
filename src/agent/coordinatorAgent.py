@@ -82,7 +82,8 @@ class CoordinatorAgent(BaseAgent):
         return coordinator
 
     async def get_current_agents(self):
-        r = httpx.get(f"{self.agent_info.registry_url}agent_amount")
+        r = httpx.get(self.agent_info.registry_get_all_agents)
+        print('---------------------------------\n\n')
         print(r.text)
     
     async def plan_task(self, state: CoordinatorState):
