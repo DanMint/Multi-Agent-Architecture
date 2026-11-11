@@ -1,9 +1,10 @@
 import httpx
 from langchain.agents import create_agent
-# from langchain.tools import tools
 from langchain_ollama import ChatOllama, OllamaEmbeddings
+import httpx
+
 from src.models.agent_info import AgentInfo
-from dataclasses import asdict
+from src.models.agent_registration import AgentRegistration
 from .heartbeat import Heartbeat
 
 """
@@ -68,19 +69,31 @@ class BaseAgent:
         self.heartbeat = Heartbeat(agent_id = self.agent_info.agent_id, registry_host = "127.0.0.1", registry_port = 9000, interval = 1)
         self.heartbeat.start()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"This is the base agent.\n Model: {self.agent_info.llm_model}\nTemperature: {self.agent_info.llm_temperature} \nSystem prompt: "
 
-    def register_agent(self):
-        payload = self.agent_info.model_dump()
+    async def register_agent(self, agent_card_url: str) -> None:
 
-        print("Sending:", payload)
-            
-        r = httpx.post(self.agent_info.registry_register_agent_url, json=payload, timeout=0.5)
+        registration = AgentRegistration(
+            agent_id=self.agent_info.agent_id,
+            agent_card_url=agent_card_url,
+            max_concurrent_tasks=self.agent_info.max_concurrent_tasks
+        )
 
-        r.raise_for_status()
+        # sending registration events
+        async with httpx.AsyncClient(timeout=0.5) as client:
+            response = await client.post(
+                self.agent_info.registry_register_agent_url,
+                json=registration.model_dump(mode='json')
+            )
 
-        return r.json()
+            response.raise_for_status()
+
+        # storing session that is assingend by the registry
+        result = response.json()
+        self.agent_info.session_id = result["session_id"]
+
+        print(f"Agent {self.agent_info.agent_id} registered successfully")
 
     def communicate(self, prompt: str) -> str:
         response = self.agent.invoke(
