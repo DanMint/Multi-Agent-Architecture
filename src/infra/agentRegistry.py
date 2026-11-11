@@ -62,6 +62,7 @@ class AgentRegistry:
 
             with self.lock:
                 if agent.agent_id in self.agents:
+                    print(f"REGISTRY: recieved agent id: {agent.agent_id}")
                     raise HTTPException(
                         status_code = 409,
                         detail = "Agent already exists"
@@ -69,12 +70,13 @@ class AgentRegistry:
                 else:
                     self.agent_amount += 1
                     self.agent_ids.append(agent.agent_id)
+                    print(f"REGISTRY: recieved agent id: {agent.agent_id}")
                     self.agents[agent.agent_id] = agent
 
             return {"message": "Agent registered"}
 
         @self.app.get("/agent/id")
-        async def get_agent(agent_id: int):
+        def get_agent(agent_id: int):
             agent_info = None
             with self.lock:
                 if agent_id in self.agents:
@@ -95,6 +97,17 @@ class AgentRegistry:
 
             return{"agent_amount": agent_amount}
 
+        # this will be used mainly by the coordinator agent to get all of the avilable agents
+        @self.app.get("/get_all_agents")
+        def get_all_agents():
+            all_agents = None
+            with self.lock:
+                if self.agents:
+                    all_agents = self.agents.copy()
+
+            return{"agents": all_agents}
+                    
+                    
     # heartbeat server
     def udp_server(self):
         UDP_HOST = "0.0.0.0"

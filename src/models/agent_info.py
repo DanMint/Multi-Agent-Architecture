@@ -1,5 +1,5 @@
 
-from dataclasses import dataclass, field
+from pydantic import BaseModel, ValidationError
 
 """
 AgentInfo: store information about agent 
@@ -23,27 +23,31 @@ AgentInfo: store information about agent
 
 """
 
-@dataclass
-class AgentInfo:
+class AgentInfo(BaseModel):
     # identification and information
-    agent_id: str
-    capabilities: list[str]
+    agent_id: int
+    capabilities: list[str] | None
     llm_model: str
     llm_temperature: int
-    agent_system_prompt: str
+    system_prompt: str
+    agent_prompt: str
+
+    # registry information
+    registry_url: str
+    register_agent_url: str
 
     # agent to agent communication
-    endpoint: str
+    endpoint: str | None
 
     # udp heartbeat listener
-    udp_host: str
-    udp_port: int
+    udp_host: str | None
+    udp_port: int | None
 
     # runtime metdata
-    session_id: str
-    status: str
+    session_id: str | None
+    status: str | None
     last_heartbeat: float | None
-    missed_hearbeats: int
+    missed_hearbeats: int | None
 
     # optimal capacity information
-    max_concurrent_tasks: int
+    max_concurrent_tasks: int | None

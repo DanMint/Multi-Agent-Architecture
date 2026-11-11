@@ -20,21 +20,30 @@ BaseAgent: base agent class that difnies the base structure of agents. It is mea
 """
 
 class BaseAgent:
-    def __init__(self, model: str, temperature: int, system_prompt: str, agent_id: int, registry_url: str = "http://127.0.0.1:8000/register") -> None:
+    def __init__(self, model: str, temperature: int, system_prompt: str, agent_prompt:str ,agent_id: int, registry_url: str = "http://127.0.0.1:8000/", create_agent: bool = True) -> None:
         self.registry_url = registry_url
         self.agent_info = AgentInfo(
+            # identification and information
             agent_id=agent_id,
             capabilities=None,
             llm_model=model,
             llm_temperature=temperature,
-            agent_system_prompt=system_prompt,
+            system_prompt=system_prompt,
+            agent_prompt=agent_prompt,
+            # registry information
+            registry_url=registry_url,
+            register_agent_url=registry_url + "register",
+            # agent to agent communication
             endpoint=None,
+            # udp heartbeat listener
             udp_host=None,
             udp_port=None,
+            # runtime metdata
             session_id=None,
             status=None,
             last_heartbeat=None,
             missed_hearbeats=None,
+            # optimal capacity information
             max_concurrent_tasks=None
         )
 
@@ -43,11 +52,12 @@ class BaseAgent:
             temperature = self.agent_info.llm_temperature
         )
 
-        self.agent = create_agent(
-            model = self.llm,
-            tools = [],
-            system_prompt = self.agent_info.agent_system_prompt
-        )
+        if create_agent:
+            self.agent = create_agent(
+                model = self.llm,
+                tools = [],
+                system_prompt = self.agent_info.system_prompt
+            )
 
         self.register_agent()
 
@@ -59,20 +69,15 @@ class BaseAgent:
         return f"This is the base agent.\n Model: {self.agent_info.llm_model}\nTemperature: {self.agent_info.llm_temperature} \nSystem prompt: "
 
     def register_agent(self):
-        payload = asdict(self.agent_info)
+        payload = self.agent_info.model_dump()
 
         print("Sending:", payload)
             
-        r = httpx.post(self.registry_url, 
-                    json=payload,
-                    timeout=0.5)
+        r = httpx.post(self.agent_info.register_agent_url, json=payload, timeout=0.5)
 
         r.raise_for_status()
 
         return r.json()
-
-    def udp_server(self):
-        pass
 
     def communicate(self, prompt: str) -> str:
         response = self.agent.invoke(
@@ -90,7 +95,7 @@ class BaseAgent:
 
 
 def main():
-    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_id=3)
+    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_id=2)
 
     print(a1)
 
