@@ -111,24 +111,6 @@ class BaseAgent:
     def __str__(self) -> str:
         return f"This is the base agent.\n Model: {self.agent_info.llm_model}\nTemperature: {self.agent_info.llm_temperature} \nSystem prompt: "
 
-    async def initialize(self):
-        """
-        Perform asynchronous initialization.
-        Subclasses can override this method.
-        """
-
-        # register agent with registry
-        await self.register_agent(self.agent_info.agent_card_url)
-
-        # start heartbeat service with registry
-        self.heartbeat.start()
-
-    @classmethod
-    async def create(cls, *args, **kwargs):
-        agent = cls(*args, **kwargs)
-        await agent.initialize()
-        return agent
-
     async def register_agent(self, agent_card_url: str) -> None:
         registration = AgentRegistration(
             agent_id=self.agent_info.agent_id,
@@ -165,6 +147,24 @@ class BaseAgent:
         )
 
         return response
+
+    async def initialize(self):
+            """
+            Perform asynchronous initialization.
+            Subclasses override this method.
+            """
+    
+            # register agent with registry
+            await self.register_agent(self.agent_info.agent_card_url)
+    
+            # start heartbeat service with registry
+            self.heartbeat.start()
+    
+    @classmethod
+    async def create(cls, *args, **kwargs):
+        agent = cls(*args, **kwargs)
+        await agent.initialize()
+        return agent
 
 
 async def main():

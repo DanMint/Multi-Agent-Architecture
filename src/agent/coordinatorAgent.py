@@ -8,8 +8,60 @@ import asyncio
 import httpx
 
 from src.agent.base import BaseAgent
-from src.models.agent_info import AgentInfo
 from src.models.agent_discovery_info import AgentDiscoveryInfo
+
+
+"""
+CoordinatorAgent: Central orchestration agent responsible for discovering,
+selecting, and delegating tasks to specialized worker agents.
+
+    Inherits from BaseAgent for agent registration, heartbeat management,
+    LLM configuration, and asynchronous initialization.
+
+    Attributes:
+        - workers: Dictionary of available worker agents, populated from
+          the Agent Registry using AgentDiscoveryInfo models.
+        - llm: Ollama model used for task planning and worker selection.
+        - planner: Structured LLM planner that generates TaskAssignment objects.
+        - graph: LangGraph workflow managing task planning and execution.
+
+    Data Models:
+        - CoordinatorState: Stores the current task, selected worker,
+          execution results, errors, and final response.
+        - TaskAssignment: Defines the selected worker and assigned task
+          using Pydantic for structured LLM output.
+
+    Methods:
+        - __init__(): Initializes the Coordinator and constructs its
+          LangGraph workflow.
+
+        - get_current_agents(): Asynchronously retrieves available workers
+          from the Agent Registry and populates the workers dictionary.
+
+        - plan_task(state): Uses the LLM to select a worker and generate a task.
+
+        - select_worker(state): Verifies that the selected worker exists.
+
+        - route_task(state): Routes execution to the worker or finish node.
+
+        - execute_worker(state): Attempts to execute the task using the
+          selected worker and captures results or errors.
+
+        - finish(state): Produces the final response or execution error.
+
+        - communicate(prompt): Executes the LangGraph workflow for a request.
+
+        - initialize(): Discovers workers, registers the Coordinator,
+          and starts heartbeat transmission.
+
+        - main(): Creates the Coordinator using the inherited asynchronous
+          factory method and executes a sample task.
+
+    Note:
+        Remote agent-to-agent communication is not yet implemented.
+        Discovered workers are metadata objects (AgentDiscoveryInfo),
+        not executable agent instances.
+"""
 
 class CoordinatorState(TypedDict):
     user_request: str
@@ -172,9 +224,6 @@ class CoordinatorAgent(BaseAgent):
         await super().initialize()
 
 async def main():
-    # c1 = CoordinatorAgent(model="llama3.1:8b", temperature=0, workers={}, system_prompt='AA', agent_prompt="", agent_id=1)
-    # response = await c1.communicate(prompt="wubba lubba")
-    # print(response)
     c1 = await CoordinatorAgent.create(model="llama3.1:8b", temperature=0, system_prompt='AA', agent_prompt="", agent_id=3, agent_name="coordinator")
     ans = await c1.communicate(prompt="Find me the best stocks to buy")
     print(ans)

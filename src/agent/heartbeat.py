@@ -2,13 +2,36 @@ import socket
 import threading
 import json
 
+
+"""
+Heartbeat: Manages periodic UDP heartbeat messages sent by an agent
+to the Agent Registry to indicate that the agent is running.
+
+    Attributes:
+        - agent_id: Unique identifier of the agent sending heartbeats.
+        - registry_address: IP address and UDP port of the Agent Registry.
+        - interval: Time in seconds between heartbeat messages.
+        - stop_event: Threading event used to signal heartbeat termination.
+        - thread: Background thread responsible for sending heartbeats.
+
+    Methods:
+        - __init__(): Initializes the agent ID, Registry connection
+          information, heartbeat interval, and stop event.
+
+        - send_heartbeat(): Periodically sends JSON heartbeat messages
+          to the Registry over UDP until the stop event is triggered.
+
+        - start(): Creates and starts a daemon thread responsible
+          for transmitting heartbeat messages.
+
+        - stop(): Signals the heartbeat thread to stop and waits
+          for its termination.
+"""
+
 class Heartbeat():
     def __init__(self, agent_id: int, registry_host: str = "127.0.0.1", registry_port: int = 9000, interval: float = 10.0):
         self.agent_id = agent_id
-        self.registry_address = (
-            registry_host,
-            registry_port
-        )
+        self.registry_address = (registry_host, registry_port)
 
         self.interval = interval
         self.stop_event = threading.Event()
@@ -21,14 +44,10 @@ class Heartbeat():
                     "id": self.agent_id
                 }
 
-                sock.sendto(
-                    json.dumps(message).encode("utf-8"),
-                    self.registry_address
-                )
+                sock.sendto(json.dumps(message).encode("utf-8"), self.registry_address)
 
                 self.stop_event.wait(self.interval)
             
-
     def start(self):
         self.thread = threading.Thread(
             target=self.send_heartbeat,

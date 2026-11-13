@@ -7,6 +7,35 @@ from typing import override
 from langchain.mcp import MCPAdapter
 from langchain.agents import create_agent
 
+"""
+ResearchAgent: Specialized worker agent responsible for web research,
+webpage retrieval, and information gathering within the multi-agent architecture.
+
+    Inherits from BaseAgent to reuse agent registration, heartbeat management,
+    LLM configuration, and asynchronous initialization.
+
+    Attributes:
+        - MCP_server: HTTP endpoint of the MCP server providing research tools.
+        - tools: List of tools discovered from the MCP server.
+        - capabilities: Agent capabilities, currently ["web_search"].
+        - max_concurrent_tasks: Maximum number of concurrent tasks (currently 1).
+
+    Methods:
+        - __init__(): Initializes the agent, MCP configuration, and capabilities.
+
+        - get_mcp_tools(): Asynchronously connects to the MCP server and
+          retrieves available research tools.
+
+        - initialize(): Discovers MCP tools, creates the LangChain agent,
+          registers with the Agent Registry, and starts heartbeat transmission.
+
+        - communicate(prompt): Asynchronously sends a prompt to the
+          LangChain agent and returns its response.
+
+        - main(): Creates the ResearchAgent using the inherited asynchronous
+          factory method and executes a sample research task.
+"""
+
 class ResearchAgent(BaseAgent):
     def __init__(self, model: str, temperature: str, agent_id: int, agent_name: str, system_prompt: str ="You are a worker agent. Listen to the coordinator", agnet_prompt:str = "..."):
         print(f"Agent id: {agent_id}")
@@ -22,6 +51,18 @@ class ResearchAgent(BaseAgent):
         async with MCPAdapter(self.MCP_server) as client:
             self.tools = await client.list_tools()
 
+    async def communicate(self, prompt: str):
+        response = await self.agent.ainvoke({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        })
+
+        return response
+
     @override
     async def initialize(self) -> None:
         # discover mcp tools
@@ -35,18 +76,6 @@ class ResearchAgent(BaseAgent):
         )
 
         await super().initialize()
-
-    async def communicate(self, prompt: str):
-        response = await self.agent.ainvoke({
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        })
-
-        return response
 
 async def main():
     WEB_SEARCH_SYSTEM_PROMPT = """
@@ -162,7 +191,6 @@ async def main():
             print("Tool result:", message.content)
 
     print("Final answer:", response["messages"][-1].content)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
