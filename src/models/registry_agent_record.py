@@ -42,8 +42,9 @@ class RegistryAgentRecord(BaseModel):
         "registered",
         "healthy",
         "suspect",
-        "unavailable"
-    ] = "registered"
+        "unavailable",
+        "active"
+    ] = "active"
 
     last_heartbeat: float | None = None
     missed_heartbeats: int = 0

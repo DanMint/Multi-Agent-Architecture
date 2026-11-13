@@ -62,6 +62,7 @@ class AgentRegistry:
 
         @self.app.post("/register", status_code=201)
         async def register(registration: AgentRegistration):
+            print(registration)
             with self.lock:
                 if registration.agent_id in self.agents:
                     raise HTTPException(
@@ -109,21 +110,22 @@ class AgentRegistry:
         # this will be used mainly by the coordinator agent to get all of the avilable agents
         @self.app.get("/get_all_agents")
         def get_all_agents():
-            all_agents = None
-
             with self.lock:
                 avilable_agents = None
+
                 avilable_agents = [
                     AgentDiscoveryInfo(
-                        agent_id=agent.agent_id,
+                        agent_id=agent.registration.agent_id,
+                        agent_name=agent.registration.agent_name,
                         status = agent.status,
-                    )
+                        max_concurrent_tasks=None
+                    ).model_dump(mode='json')
 
                     for agent in self.agents.values()
                     if agent.status == "active"
                 ]
 
-            return{avilable_agents}
+            return{"agents": avilable_agents}
                     
     # heartbeat server
     def udp_server(self):

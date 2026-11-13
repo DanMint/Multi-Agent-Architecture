@@ -30,12 +30,15 @@ Note:
 """
 
 class AgentRegistration(BaseModel):
-    # identity
-    agent_id: int = Field(ge=1)
+  # identity
+  agent_id: int = Field(ge=1)
 
-    # A2A discovery
-    agent_card_url: AnyHttpUrl | None
+  # agent name
+  agent_name: str
 
-    # capacity
-    max_concurrent_tasks: int | None
+  # A2A discovery
+  agent_card_url: AnyHttpUrl | None
+
+  # capacity
+  max_concurrent_tasks: int | None
 

@@ -51,11 +51,12 @@ Methods:
 """
 
 class BaseAgent:
-    def __init__(self, model: str, temperature: int, system_prompt: str, agent_prompt:str ,agent_id: int, registry_url: str = "http://127.0.0.1:8000/", coordinator: bool = False) -> None:
+    def __init__(self, model: str, temperature: int, system_prompt: str, agent_prompt:str ,agent_id: int, agent_name: str, registry_url: str = "http://127.0.0.1:8000/", coordinator: bool = False) -> None:
         self.registry_url = registry_url
         self.agent_info = AgentInfo(
             # identification and information
             agent_id=agent_id,
+            agent_name=agent_name,
             capabilities=None,
             llm_model=model,
             llm_temperature=temperature,
@@ -131,6 +132,7 @@ class BaseAgent:
     async def register_agent(self, agent_card_url: str) -> None:
         registration = AgentRegistration(
             agent_id=self.agent_info.agent_id,
+            agent_name=self.agent_info.agent_name,
             agent_card_url=agent_card_url,
             max_concurrent_tasks=self.agent_info.max_concurrent_tasks
         )
@@ -166,7 +168,7 @@ class BaseAgent:
 
 
 async def main():
-    a1 = await BaseAgent.create(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_prompt="...", agent_id=2)
+    a1 = await BaseAgent.create(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_prompt="...", agent_id=2, agent_name = "base")
 
     print(a1)
 

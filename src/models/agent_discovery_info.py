@@ -52,14 +52,14 @@ Note:
 """
 
 class AgentDiscoveryInfo(BaseModel):
-    # Identity
-    agent_id: int
-    name: str | None
+  # Identity
+  agent_id: int
+  agent_name: str | None
 
-    # # A2A discovery
-    # skills: list[str]
-    # agent_card_url: AnyHttpUrl
+  # # A2A discovery
+  # skills: list[str]
+  # agent_card_url: AnyHttpUrl
 
-    # Runtime availability
-    status: Literal["healthy"]
-    max_concurrent_tasks: int | None
+  # Runtime availability
+  status: Literal["active"]
+  max_concurrent_tasks: int | None

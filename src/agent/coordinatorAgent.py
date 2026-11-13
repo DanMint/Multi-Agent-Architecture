@@ -3,12 +3,12 @@ from typing import Any, TypedDict
 from pydantic import BaseModel, Field
 from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, START, END
+from typing import override
+import asyncio
+
+import httpx
 from src.agent.base import BaseAgent
 from src.models.agent_info import AgentInfo
-
-import asyncio
-import threading
-import httpx
 
 class CoordinatorState(TypedDict):
     user_request: str
@@ -28,9 +28,9 @@ class TaskAssignment(BaseModel):
     )
 
 class CoordinatorAgent(BaseAgent):
-    def __init__(self, model: str, system_prompt: str, agent_prompt: str, agent_id: int, temperature: float = 0.0, workers: dict[str, Any] | None = None):
+    def __init__(self, model: str, system_prompt: str, agent_prompt: str, agent_id: int, agent_name: str, temperature: float = 0.0, workers: dict[str, Any] | None = None):
         print(f"Agent id: {agent_id}")
-        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id, coordinator=True)
+        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id, coordinator=True, agent_name=agent_name)
         # Available worker agents
         self.workers = workers or {}
 
@@ -75,11 +75,17 @@ class CoordinatorAgent(BaseAgent):
         # Compile the workflow
         self.graph = workflow.compile()
 
-    @classmethod
-    async def create(cls, model, temperature, system_prompt, agent_prompt, agent_id):
-        coordinator = cls(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id)
-        await coordinator.get_current_agents()
-        return coordinator
+    # @classmethod
+    # async def create(cls, model, temperature, system_prompt, agent_prompt, agent_id):
+    #     coordinator = cls(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id)
+    #     await coordinator.get_current_agents()
+    #     return coordinator
+    @override
+    async def initialize(self) -> None:
+        print("---getting all avilabe agents---\n")
+        await self.get_current_agents()
+        print("---setting up---n")
+        await super().initialize()
 
     async def get_current_agents(self):
         r = httpx.get(self.agent_info.registry_get_all_agents)
@@ -172,7 +178,9 @@ async def main():
     # c1 = CoordinatorAgent(model="llama3.1:8b", temperature=0, workers={}, system_prompt='AA', agent_prompt="", agent_id=1)
     # response = await c1.communicate(prompt="wubba lubba")
     # print(response)
-    c1 = await CoordinatorAgent.create(model="llama3.1:8b", temperature=0, system_prompt='AA', agent_prompt="", agent_id=1)
+    c1 = await CoordinatorAgent.create(model="llama3.1:8b", temperature=0, system_prompt='AA', agent_prompt="", agent_id=3, agent_name="coordinator")
+    ans = await c1.communicate(prompt="Find me the best stocks to buy")
+    print(ans)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())     

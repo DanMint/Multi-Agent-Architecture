@@ -99,6 +99,7 @@ Note:
 class AgentInfo(BaseModel):
     # identification and information
     agent_id: int
+    agent_name: str
     capabilities: list[str] | None
     llm_model: str
     llm_temperature: int
