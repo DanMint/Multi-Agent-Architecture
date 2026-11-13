@@ -11,10 +11,6 @@ on:
 
   pull_request:
     branches: [main, master]
-    paths:
-      - 'src/agent/base.py'
-      - 'tests/test_base_agent.py'
-      - '.github/workflows/agent_base_check.yaml'
 
 jobs:
   test:

@@ -1,0 +1,46 @@
+name: Coordinator agent check
+
+on: 
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/agent/coordinatorAgent.py'
+      - 'tests/test_coordinator_agent.py'
+      - '.github/workflows/coordinator_agent_check.yaml'
+  
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Coordinator-agent-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check code
+        uses: actions/checkout@v4
+
+      - name: set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "langchain[mcp]>=1.4.0" \
+            langchain-ollama \
+            langgraph \
+            fastmcp \
+            ddgs \
+            trafilatura \
+            httpx \
+            fastapi \
+            uvicorn \
+            "pydantic>=2.0" \
+            pytest \
+            pytest-asyncio
+
+      - name: Web search tests
+        run: python -m pytest tests/test_coordinator_agent.py -v
