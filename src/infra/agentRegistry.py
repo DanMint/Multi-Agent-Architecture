@@ -9,8 +9,13 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 import socket
 from dataclasses import asdict
+import copy
 
 from src.models.agent_info import AgentInfo
+from src.models.agent_registration import AgentRegistration
+from src.models.registry_agent_record import RegistryAgentRecord
+from src.models.agent_discovery_info import AgentDiscoveryInfo
+
 
 """
 AgentRegistry: registers new agents via HTTP and keeps track of current agents via UDP heartbeat signals
@@ -32,7 +37,7 @@ class AgentRegistry:
         # information about agents
         self.agent_amount : int = 0
         self.agent_ids : list[int] = []
-        self.agents : dict[AgentInfo] = {}
+        self.agents : dict[int, RegistryAgentRecord] = {}
 
         # shared data protection
         self.lock = threading.Lock()
@@ -55,46 +60,73 @@ class AgentRegistry:
     # Tells FastAPI which HTTP endpoints exists and how to handle them
     def setup_routes(self):
 
-        @self.app.post("/register")
-        async def register(request: Request):
-            data = await request.json()
-            agent = AgentInfo(**data)
-
+        @self.app.post("/register", status_code=201)
+        async def register(registration: AgentRegistration):
+            print(registration)
             with self.lock:
-                if agent.agent_id in self.agents:
+                if registration.agent_id in self.agents:
                     raise HTTPException(
-                        status_code = 409,
-                        detail = "Agent already exists"
+                        status_code=409,
+                        detail="Agent already exists"
                     )
-                else:
-                    self.agent_amount += 1
-                    self.agent_ids.append(agent.agent_id)
-                    self.agents[agent.agent_id] = agent
 
-            return {"message": "Agent registered"}
+                # create internal registry record
+                record = RegistryAgentRecord(registration=registration)
 
+                self.agents[registration.agent_id] = record
+                self.agent_amount += 1
+                self.agent_ids.append(registration.agent_id)
+
+            print(f"REGISTRY: registered agent: {record.registration.agent_id}")
+
+            return {
+                    "message": "Agent registered",
+                    "session_id": record.session_id,
+                    "status": record.status
+                }
+        
         @self.app.get("/agent/id")
-        async def get_agent(agent_id: int):
+        def get_agent(agent_id: int):
             agent_info = None
             with self.lock:
-                if agent_id in self.agents:
-                    agent_info = self.agents[agent_id]
-                else:
+                if agent_id not in self.agents:
                     raise HTTPException(
-                        status_code=404,
-                        detail="Agent does not exist"
-                    )
+                            status_code=404,
+                            detail="Agent does not exist"
+                        )
+                else:
+                    agent_info = self.agents[agent_id]
 
             return{"agent": agent_info}
 
         @self.app.get("/agent_amount")
         def get_amount_of_agents():
-            agent_amount:int
+            agent_amount = 0
             with self.lock:
                 agent_amount = self.agent_amount
 
             return{"agent_amount": agent_amount}
 
+        # this will be used mainly by the coordinator agent to get all of the avilable agents
+        @self.app.get("/get_all_agents")
+        def get_all_agents():
+            with self.lock:
+                avilable_agents = None
+
+                avilable_agents = [
+                    AgentDiscoveryInfo(
+                        agent_id=agent.registration.agent_id,
+                        agent_name=agent.registration.agent_name,
+                        status = agent.status,
+                        max_concurrent_tasks=None
+                    ).model_dump(mode='json')
+
+                    for agent in self.agents.values()
+                    if agent.status == "active"
+                ]
+
+            return{"agents": avilable_agents}
+                    
     # heartbeat server
     def udp_server(self):
         UDP_HOST = "0.0.0.0"

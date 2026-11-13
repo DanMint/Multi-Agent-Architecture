@@ -1,40 +1,90 @@
 import httpx
 from langchain.agents import create_agent
-# from langchain.tools import tools
 from langchain_ollama import ChatOllama, OllamaEmbeddings
+import httpx
+import asyncio
+
 from src.models.agent_info import AgentInfo
-from dataclasses import asdict
+from src.models.agent_registration import AgentRegistration
 from .heartbeat import Heartbeat
 
 """
-BaseAgent: base agent class that difnies the base structure of agents. It is meant to be used as a parent class
-    passed parameters:
-        model: str =  the type of LLM model that the agent will use
-        temperature: str = the temperature 
-        system_prompt: str = the prompt that is given to the model
-        agent_id: int = unique id for each agent
-        registry_url: str = http url where the registry http server lives
+BaseAgent: Base class defining the common structure and functionality of agents
+in the multi-agent architecture. Intended to be inherited by specialized agents.
 
-    - register_agent(): sends an http message to the register server sending agents information
-    - communicate(prompt: str): communication handeling with the agent
+Parameters:
+    model (str): Name of the LLM model used by the agent (e.g., llama3.1:8b).
+    temperature (int): Temperature setting controlling the LLM's randomness.
+    system_prompt (str): System instructions defining the agent's behavior.
+    agent_prompt (str): Agent-specific prompt stored in AgentInfo.
+    agent_id (int): Unique identifier assigned to the agent.
+    registry_url (str): HTTP URL of the agent registry server.
+    coordinator (bool): If True, skips creation of the default LangChain agent.
+                        Defaults to False.
+
+Attributes:
+    agent_info (AgentInfo): Stores agent identification, configuration, registry
+                            endpoints, communication details, and runtime metadata.
+    llm (ChatOllama): Local Ollama language model instance.
+    agent: LangChain agent created using the configured LLM and system prompt.
+           Only initialized when coordinator=False.
+    heartbeat (Heartbeat): UDP heartbeat service used to notify the registry
+                           that the agent is active.
+
+Methods:
+    __init__(): Initializes agent information, LLM, LangChain agent, and heartbeat.
+
+    initialize(): Performs asynchronous initialization by registering the agent
+                  with the registry and starting the heartbeat service.
+                  Can be overridden by subclasses.
+
+    create(): Asynchronous factory method that creates an agent instance,
+              awaits initialization, and returns the initialized agent.
+
+    register_agent(agent_card_url: str): Asynchronously registers the agent with
+              the registry using HTTP POST and stores the assigned session ID.
+
+    communicate(prompt: str): Sends a user prompt to the LangChain agent
+              for asynchronous processing and returns the agent response.
+
+    __str__(): Returns a string representation of the agent configuration.
 """
 
 class BaseAgent:
-    def __init__(self, model: str, temperature: int, system_prompt: str, agent_id: int, registry_url: str = "http://127.0.0.1:8000/register") -> None:
+    def __init__(self, model: str, temperature: int, system_prompt: str, agent_prompt:str ,agent_id: int, agent_name: str, registry_url: str = "http://127.0.0.1:8000/", coordinator: bool = False) -> None:
         self.registry_url = registry_url
         self.agent_info = AgentInfo(
+            # identification and information
             agent_id=agent_id,
+            agent_name=agent_name,
             capabilities=None,
             llm_model=model,
             llm_temperature=temperature,
-            agent_system_prompt=system_prompt,
+            system_prompt=system_prompt,
+            agent_prompt=agent_prompt,
+            agent_card_url=None,
+
+            # registry information
+            registry_url=registry_url,
+            registry_register_agent_url=registry_url + "register",
+            registry_get_agent_by_id_url=registry_url + "agent/id",
+            registry_get_agent_amount_url=registry_url + "agent_amount",
+            registry_get_all_agents=registry_url + "get_all_agents",
+
+            # agent to agent communication
             endpoint=None,
+
+            # udp heartbeat listener
             udp_host=None,
             udp_port=None,
+
+            # runtime metdata
             session_id=None,
             status=None,
             last_heartbeat=None,
             missed_hearbeats=None,
+
+            # optimal capacity information
             max_concurrent_tasks=None
         )
 
@@ -43,39 +93,67 @@ class BaseAgent:
             temperature = self.agent_info.llm_temperature
         )
 
-        self.agent = create_agent(
-            model = self.llm,
-            tools = [],
-            system_prompt = self.agent_info.agent_system_prompt
+        if not coordinator:
+            self.agent = create_agent(
+                model = self.llm,
+                tools = [],
+                system_prompt = self.agent_info.system_prompt
+            )
+
+        # setting up heartbeat config
+        self.heartbeat = Heartbeat(
+            agent_id = self.agent_info.agent_id, 
+            registry_host = "127.0.0.1", 
+            registry_port = 9000, 
+            interval = 1
         )
 
-        self.register_agent()
-
-        # call heartbeats
-        self.heartbeat = Heartbeat(agent_id = self.agent_info.agent_id, registry_host = "127.0.0.1", registry_port = 9000, interval = 1)
-        self.heartbeat.start()
-
-    def __str__(self):
+    def __str__(self) -> str:
         return f"This is the base agent.\n Model: {self.agent_info.llm_model}\nTemperature: {self.agent_info.llm_temperature} \nSystem prompt: "
 
-    def register_agent(self):
-        payload = asdict(self.agent_info)
+    async def initialize(self):
+        """
+        Perform asynchronous initialization.
+        Subclasses can override this method.
+        """
 
-        print("Sending:", payload)
-            
-        r = httpx.post(self.registry_url, 
-                    json=payload,
-                    timeout=0.5)
+        # register agent with registry
+        await self.register_agent(self.agent_info.agent_card_url)
 
-        r.raise_for_status()
+        # start heartbeat service with registry
+        self.heartbeat.start()
 
-        return r.json()
+    @classmethod
+    async def create(cls, *args, **kwargs):
+        agent = cls(*args, **kwargs)
+        await agent.initialize()
+        return agent
 
-    def udp_server(self):
-        pass
+    async def register_agent(self, agent_card_url: str) -> None:
+        registration = AgentRegistration(
+            agent_id=self.agent_info.agent_id,
+            agent_name=self.agent_info.agent_name,
+            agent_card_url=agent_card_url,
+            max_concurrent_tasks=self.agent_info.max_concurrent_tasks
+        )
 
-    def communicate(self, prompt: str) -> str:
-        response = self.agent.invoke(
+        # sending registration events
+        async with httpx.AsyncClient(timeout=0.5) as client:
+            response = await client.post(
+                self.agent_info.registry_register_agent_url,
+                json=registration.model_dump(mode='json')
+            )
+
+            response.raise_for_status()
+
+        # storing session that is assingend by the registry
+        result = response.json()
+        self.agent_info.session_id = result["session_id"]
+
+        print(f"Agent {self.agent_info.agent_id} registered successfully")
+
+    async def communicate(self, prompt: str) -> str:
+        response = await self.agent.ainvoke(
             {
                 "messages": [
                     {
@@ -89,8 +167,8 @@ class BaseAgent:
         return response
 
 
-def main():
-    a1 = BaseAgent(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_id=3)
+async def main():
+    a1 = await BaseAgent.create(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_prompt="...", agent_id=2, agent_name = "base")
 
     print(a1)
 
@@ -99,8 +177,12 @@ def main():
     while user_input != "exit":
         user_input = input("Input a message: ")
 
-        print(a1.communicate(user_input).get('messages')[1].content)
+        response = await a1.communicate(user_input)
+        print(response.get('messages')[1].content)
+
+        if user_input == "exit":
+            a1.heartbeat.stop()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
     

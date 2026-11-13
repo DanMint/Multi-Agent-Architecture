@@ -1,31 +1,40 @@
 from src.agent.base import BaseAgent  
 import threading
 import asyncio
+from contextlib import AsyncExitStack
+from typing import override
+
 from langchain.mcp import MCPAdapter
 from langchain.agents import create_agent
 
 class ResearchAgent(BaseAgent):
-    def __init__(self, model: str, temperature: str, agent_id: int, system_prompt : str ="You are a worker agent. Listen to the coordinator"):
-        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_id=agent_id)
+    def __init__(self, model: str, temperature: str, agent_id: int, agent_name: str, system_prompt: str ="You are a worker agent. Listen to the coordinator", agnet_prompt:str = "..."):
+        print(f"Agent id: {agent_id}")
+        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agnet_prompt, agent_id=agent_id, coordinator=False, agent_name=agent_name)
 
         self.MCP_server = "http://127.0.0.1:8001/mcp"
         self.tools = []
 
-    async def get_mcp_tools(self):
+        self.agent_info.capabilities = ["web_search"]
+        self.agent_info.max_concurrent_tasks = 1
+
+    async def get_mcp_tools(self) -> None:
         async with MCPAdapter(self.MCP_server) as client:
             self.tools = await client.list_tools()
 
-    async def initialize(self):
+    @override
+    async def initialize(self) -> None:
         # discover mcp tools
         await self.get_mcp_tools()
 
-        # replace base agent with custom agent
         self.agent = create_agent(
             model=self.llm,
             tools=self.tools,
-            system_prompt=self.agent_info.agent_system_prompt
+            system_prompt=self.agent_info.system_prompt
 
         )
+
+        await super().initialize()
 
     async def communicate(self, prompt: str):
         response = await self.agent.ainvoke({
@@ -40,7 +49,6 @@ class ResearchAgent(BaseAgent):
         return response
 
 async def main():
-    
     WEB_SEARCH_SYSTEM_PROMPT = """
         You are a specialized Web Search Agent operating within
         a multi-agent AI system.
@@ -142,10 +150,9 @@ async def main():
         simply summarizing search snippets.
     """
 
-    r1 = ResearchAgent(model="llama3.1:8b", temperature=0, agent_id=1, system_prompt=WEB_SEARCH_SYSTEM_PROMPT)
-    await r1.initialize()
-    response = await r1.communicate(
-        "Conduct research in the best stocks to buy today and tell me 5 stocks to buy now"
+    w1 = await ResearchAgent.create(model="llama3.1:8b", temperature=0, agent_id=2, system_prompt=WEB_SEARCH_SYSTEM_PROMPT, agent_name = "Web_Search")
+    response = await w1.communicate(
+        "Conduct research in the best index funds and ETFs to buy today"
     )
 
     # Inspect actual tool calls
