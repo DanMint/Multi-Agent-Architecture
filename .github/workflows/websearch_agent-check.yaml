@@ -1,4 +1,4 @@
-name: Websearch aagent check
+name: Websearch agent check
 
 on: 
   push:
