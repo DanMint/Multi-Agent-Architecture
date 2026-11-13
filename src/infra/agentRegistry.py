@@ -1,35 +1,64 @@
 import threading
 import time
 import socket
-import json
-import secrets
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException
 import socket
-from dataclasses import asdict
-import copy
 
-from src.models.agent_info import AgentInfo
 from src.models.agent_registration import AgentRegistration
 from src.models.registry_agent_record import RegistryAgentRecord
 from src.models.agent_discovery_info import AgentDiscoveryInfo
 
-
 """
-AgentRegistry: registers new agents via HTTP and keeps track of current agents via UDP heartbeat signals
+AgentRegistry: Central registry responsible for agent registration, discovery,
+and tracking registered agents within the multi-agent architecture.
 
-    - agent_amount : int = amount of agents registred by the registry
-    - agent_ids : list = stores agent ids
-    - agents : dict = stores agent id with the corresponding agent
-    - lock : threading.Lock() = mutex lock to access shared data structures
-    - app : FastAPI() = HTTP server for the registration
-    - server : str = server IPv4 address of the server
-    - server_thread = keeps track of the server thread
-    
-    - setup_routes() = sets up HTTP requests handling
-    - start() = the main function of the class. it starts the http server, UDP server and sends UDP heartbeats
+    Uses FastAPI for HTTP communication and a separate UDP server for
+    receiving heartbeat messages from registered agents.
+
+    Attributes:
+        - agent_amount: Total number of registered agents.
+        - agent_ids: List of registered agent identifiers.
+        - agents: Dictionary mapping agent IDs to RegistryAgentRecord objects.
+        - lock: Threading mutex protecting shared registry data.
+        - app: FastAPI application handling HTTP requests.
+        - http_server: Uvicorn server handling HTTP communication.
+        - http_server_thread: Background thread running the HTTP server.
+        - UDP_server_thread: Background thread receiving UDP heartbeats.
+        - stop_event: Threading event used to stop the UDP server.
+
+    Methods:
+        - __init__(): Initializes registry data structures, synchronization
+          mechanisms, server configuration, and HTTP routes.
+
+        - setup_routes(): Defines HTTP endpoints for agent registration,
+          retrieval by ID, agent counts, and worker discovery.
+
+        - udp_server(): Listens for incoming UDP heartbeat messages
+          from registered agents.
+
+        - start_udp_server_thread(): Starts the UDP listener in a daemon thread.
+
+        - start_http_server(): Starts the FastAPI/Uvicorn HTTP server
+          in a separate daemon thread.
+
+        - start(): Starts both HTTP and UDP servers.
+
+        - stop(): Signals both servers to stop and joins their threads.
+
+        - main(): Creates and starts the Agent Registry, keeping it
+          running until interrupted.
+
+    HTTP Endpoints:
+        - POST /register: Registers an agent and assigns a session ID.
+        - GET /agent/id: Retrieves a registered agent by its ID.
+        - GET /agent_amount: Returns the number of registered agents.
+        - GET /get_all_agents: Returns discovery information for active agents.
+
+    Note:
+        UDP heartbeats are currently received and logged but do not yet
+        update agent health status or detect unavailable agents.
 """
 
 class AgentRegistry:
