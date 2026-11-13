@@ -10,10 +10,6 @@ on:
   
   pull_request:
     branches: [main, master]
-    paths:
-      - 'src/agent/coordinatorAgent.py'
-      - 'tests/test_coordinator_agent.py'
-      - '.github/workflows/coordinator_agent_check.yaml'
 
 jobs:
   test:

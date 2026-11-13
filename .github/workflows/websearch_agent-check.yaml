@@ -10,10 +10,6 @@ on:
   
   pull_request:
     branches: [main, master]
-    paths:
-      - 'src/agent/CustomAgents/webSearchAgent/webSearchAgent.py'
-      - 'tests/test_webSearch_agent.py'
-      - '.github/workflows/websearch_agent-check.yaml'
 
 jobs:
   test:
