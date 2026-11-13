@@ -5,10 +5,11 @@ from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, START, END
 from typing import override
 import asyncio
-
 import httpx
+
 from src.agent.base import BaseAgent
 from src.models.agent_info import AgentInfo
+from src.models.agent_discovery_info import AgentDiscoveryInfo
 
 class CoordinatorState(TypedDict):
     user_request: str
@@ -28,11 +29,11 @@ class TaskAssignment(BaseModel):
     )
 
 class CoordinatorAgent(BaseAgent):
-    def __init__(self, model: str, system_prompt: str, agent_prompt: str, agent_id: int, agent_name: str, temperature: float = 0.0, workers: dict[str, Any] | None = None):
+    def __init__(self, model: str, system_prompt: str, agent_prompt: str, agent_id: int, agent_name: str, temperature: float = 0.0, workers: dict[str, AgentDiscoveryInfo] | None = None):
         print(f"Agent id: {agent_id}")
         super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id, coordinator=True, agent_name=agent_name)
         # Available worker agents
-        self.workers = workers or {}
+        self.workers =  workers or {}
 
         # Coordinator's LLM
         self.llm = ChatOllama(
@@ -75,23 +76,17 @@ class CoordinatorAgent(BaseAgent):
         # Compile the workflow
         self.graph = workflow.compile()
 
-    # @classmethod
-    # async def create(cls, model, temperature, system_prompt, agent_prompt, agent_id):
-    #     coordinator = cls(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id)
-    #     await coordinator.get_current_agents()
-    #     return coordinator
-    @override
-    async def initialize(self) -> None:
-        print("---getting all avilabe agents---\n")
-        await self.get_current_agents()
-        print("---setting up---n")
-        await super().initialize()
+    async def get_current_agents(self) -> None:
+        async with httpx.AsyncClient(timeout=0.5) as client:
+            response = await client.get(self.agent_info.registry_get_all_agents) 
+            response.raise_for_status()
 
-    async def get_current_agents(self):
-        r = httpx.get(self.agent_info.registry_get_all_agents)
-        print('---------------------------------\n\n')
-        print(r.text)
-    
+        data = response.json()
+
+        for agent in data["agents"]:
+            if agent.get("agent_name") != "coordinator":
+                self.workers[agent.get("agent_name")] = AgentDiscoveryInfo.model_validate(agent)
+            
     async def plan_task(self, state: CoordinatorState):
         print("planning")
         available_agents = ", ".join(self.workers.keys())
@@ -139,12 +134,8 @@ class CoordinatorAgent(BaseAgent):
         worker = self.workers[state["worker_name"]]
 
         try:
-            response = await worker.communicate(
-                state["task"]
-            )
-
+            response = await worker.communicate(state["task"])
             result = response["messages"][-1].content
-
             return {"worker_result": str(result)}
 
         except Exception as exc:
@@ -173,6 +164,12 @@ class CoordinatorAgent(BaseAgent):
 
         return result["final_answer"]
 
+    async def initialize(self) -> None:
+        # get all worker agents
+        await self.get_current_agents()
+
+        # register coordinator agent to registry and set up heartbeat messages
+        await super().initialize()
 
 async def main():
     # c1 = CoordinatorAgent(model="llama3.1:8b", temperature=0, workers={}, system_prompt='AA', agent_prompt="", agent_id=1)
