@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+import asyncio
+import uvicorn
 
 from a2a.types import (
     AgentCard, AgentSkill, AgentCapabilities,
@@ -14,9 +16,54 @@ from a2a.server.routes import (
     create_jsonrpc_routes
 )
 
-class WorkerExecutor(AgentExecutor):
-    def __init__(self, agent):
+class A2AServer(AgentExecutor):
+    def __init__(self, agent, port):
         self.agent = agent
+        self.port = port
+
+        # create agent card
+        self.card = AgentCard(
+                name=agent.agent_info.agent_name,
+                description=agent.agent_info.description,
+                version=agent.agent_info.version,
+                supported_interfaces=[
+                    AgentInterface(
+                        url=f"http://127.0.0.1:{port}",
+                        protocol_bindings="JSONRPC",
+                        protocol_version="1.0"
+                    )
+                ],
+                capabilities=AgentCapabilities(streaming=False),
+                default_input_modes=["text/plain"],
+                defualt_output_modes=["text/plain"],
+                skills=[
+                    AgentSkill(
+                        id="task-task",
+                        name="Text Task",
+                        description="Process text requests",
+                        tags=["text", "worker"]
+                    )
+                ]
+            )
+
+        # create A2A request handler
+        self.handler = DefaultRequestHandler(
+            agent_executor=self,
+            task_store=InMemoryTaskStore(),
+            agent_card=self.card
+        )
+
+        # create routes and FastAPI app
+        routes = [
+            *create_agent_card_routes(self.card),
+            *create_jsonrpc_routes(self.handler, "/")
+        ]
+
+        self.app = FastAPI(routes=routes)
+
+        # server lifecycle
+        self.server = None
+        self.server_task = None
 
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         # get coordinators message
@@ -40,40 +87,41 @@ class WorkerExecutor(AgentExecutor):
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         raise NotImplementedError("Cancellation not supported")
 
-def create_a2a_app(agent, port: int) -> FastAPI:
-    card = AgentCard(
-        name=agent.agent_info.agent_name,
-        description=agent.agent_info.description,
-        version=agent.agent_info.version,
-        supported_interfaces=[
-            AgentInterface(
-                url=f"http://127.0.0.1:{port}",
-                protocol_bindings="JSONRPC",
-                protocol_version="1.0"
-            )
-        ],
-        capabilities=AgentCapabilities(streaming=False),
-        default_input_modes=["text/plain"],
-        defualt_output_modes=["text/plain"],
-        skills=[
-            AgentSkill(
-                id="task-task",
-                name="Text Task",
-                description="Process text requests",
-                tags=["text", "worker"]
-            )
-        ]
-    )
+    async def start(self):
+        # configure Uvicorn
+        config = uvicorn.Config(
+            app=self.app,
+            host="127.0.0.1",
+            port=self.port
+        )
 
-    handler = DefaultRequestHandler(
-        agent_executor=WorkerExecutor(agent),
-        task_store=InMemoryTaskStore(),
-        agent_card=card
-    )
+        self.server = uvicorn.Server(config)
 
-    routes = [
-        *create_agent_card_routes(card),
-        *create_jsonrpc_routes(handler, "/")
-    ]
+        # start server asynchronously
+        self.server_task = asyncio.create_task(
+            self.server.serve()
+        )
 
-    return FastAPI(routes=routes)
+        # wait until the server starts listening
+        for _ in range(100):
+            if self.server.started:
+                return
+
+            if self.server_task.done():
+                await self.server_task
+                raise RuntimeError("A2A server failed to start")
+
+            await asyncio.sleep(0.05)
+
+        # startup timed out
+        await self.stop()
+        raise RuntimeError("A2A server startup timed out")
+
+    async def stop(self):
+        if self.server is not None:
+            self.server.server_should_exit = True
+
+        if self.server_task is not None:
+            await self.server_task
+
+        await self.handler.aclose()
