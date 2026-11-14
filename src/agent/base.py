@@ -7,6 +7,8 @@ import asyncio
 from src.models.agent_info import AgentInfo
 from src.models.agent_registration import AgentRegistration
 from .heartbeat import Heartbeat
+from .A2A_server import create_a2a_app
+from .A2A_client import A2AClient
 
 """
 BaseAgent: Base class defining the common structure and functionality of agents
@@ -52,6 +54,7 @@ Methods:
 
 class BaseAgent:
     def __init__(self, model: str, temperature: int, system_prompt: str, agent_prompt:str ,agent_id: int, agent_name: str, registry_url: str = "http://127.0.0.1:8000/", coordinator: bool = False) -> None:
+        self.coordinator = coordinator
         self.registry_url = registry_url
         self.agent_info = AgentInfo(
             # identification and information
@@ -93,7 +96,7 @@ class BaseAgent:
             temperature = self.agent_info.llm_temperature
         )
 
-        if not coordinator:
+        if not self.coordinator:
             self.agent = create_agent(
                 model = self.llm,
                 tools = [],
@@ -153,12 +156,17 @@ class BaseAgent:
             Perform asynchronous initialization.
             Subclasses override this method.
             """
-    
+            # start A2A server if NOT coordinator
+            if not self.coordinator:
+                create_a2a_app()
+                
             # register agent with registry
             await self.register_agent(self.agent_info.agent_card_url)
     
             # start heartbeat service with registry
             self.heartbeat.start()
+
+            
     
     @classmethod
     async def create(cls, *args, **kwargs):
