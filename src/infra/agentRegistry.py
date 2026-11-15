@@ -146,6 +146,7 @@ class AgentRegistry:
                     AgentDiscoveryInfo(
                         agent_id=agent.registration.agent_id,
                         agent_name=agent.registration.agent_name,
+                        agent_card_url=agent.registration.agent_card_url,
                         status = agent.status,
                         max_concurrent_tasks=None
                     ).model_dump(mode='json')

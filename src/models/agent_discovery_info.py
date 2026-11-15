@@ -58,7 +58,7 @@ class AgentDiscoveryInfo(BaseModel):
 
   # # A2A discovery
   # skills: list[str]
-  # agent_card_url: AnyHttpUrl
+  agent_card_url: AnyHttpUrl
 
   # Runtime availability
   status: Literal["active"]

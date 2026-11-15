@@ -7,7 +7,7 @@ import asyncio
 from src.models.agent_info import AgentInfo
 from src.models.agent_registration import AgentRegistration
 from .heartbeat import Heartbeat
-from .A2A_server import create_a2a_app
+from .A2A_server import A2AServer
 from .A2A_client import A2AClient
 
 """
@@ -53,19 +53,20 @@ Methods:
 """
 
 class BaseAgent:
-    def __init__(self, model: str, temperature: int, system_prompt: str, agent_prompt:str ,agent_id: int, agent_name: str, registry_url: str = "http://127.0.0.1:8000/", coordinator: bool = False) -> None:
+    def __init__(self, model: str, temperature: int, system_prompt: str, agent_prompt:str ,agent_id: int, agent_name: str, description: str, registry_url: str = "http://127.0.0.1:8000/", coordinator: bool = False) -> None:
         self.coordinator = coordinator
         self.registry_url = registry_url
         self.agent_info = AgentInfo(
             # identification and information
             agent_id=agent_id,
             agent_name=agent_name,
+            description=description,
+            version="1.0.0",
             capabilities=None,
             llm_model=model,
             llm_temperature=temperature,
             system_prompt=system_prompt,
             agent_prompt=agent_prompt,
-            agent_card_url=None,
 
             # registry information
             registry_url=registry_url,
@@ -74,12 +75,9 @@ class BaseAgent:
             registry_get_agent_amount_url=registry_url + "agent_amount",
             registry_get_all_agents=registry_url + "get_all_agents",
 
-            # agent to agent communication
-            endpoint=None,
-
-            # udp heartbeat listener
-            udp_host=None,
-            udp_port=None,
+            # A2A agent card url
+            agent_card_url=None,
+            agent_A2A_endpoint=None,
 
             # runtime metdata
             session_id=None,
@@ -152,22 +150,24 @@ class BaseAgent:
         return response
 
     async def initialize(self):
-            """
-            Perform asynchronous initialization.
-            Subclasses override this method.
-            """
-            # start A2A server if NOT coordinator
-            if not self.coordinator:
-                create_a2a_app()
-                
-            # register agent with registry
-            await self.register_agent(self.agent_info.agent_card_url)
-    
-            # start heartbeat service with registry
-            self.heartbeat.start()
-
+        """
+        Perform asynchronous initialization.
+        Subclasses override this method.
+        """
+        port = 8008
+        # start A2A server if NOT coordinator
+        if not self.coordinator:
+            self.aegnt_A2AServer = A2AServer(agent=self, port=8008)
+            await self.aegnt_A2AServer.start()
+            self.agent_info.agent_card_url = f"http://127.0.0.1:{port}/.well-known/agent-card.json"
+            self.agent_info.agent_A2A_endpoint = f"http://127.0.0.1:{port}"
             
-    
+        # register agent with registry
+        await self.register_agent(self.agent_info.agent_card_url)
+
+        # start heartbeat service with registry
+        self.heartbeat.start()
+
     @classmethod
     async def create(cls, *args, **kwargs):
         agent = cls(*args, **kwargs)
@@ -176,7 +176,7 @@ class BaseAgent:
 
 
 async def main():
-    a1 = await BaseAgent.create(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_prompt="...", agent_id=2, agent_name = "base")
+    a1 = await BaseAgent.create(model="llama3.1:8b", temperature=0, system_prompt="You are a helpful assistant", agent_prompt="...", agent_id=2, agent_name = "base", description="You are the base agent")
 
     print(a1)
 

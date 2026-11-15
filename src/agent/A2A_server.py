@@ -29,13 +29,13 @@ class A2AServer(AgentExecutor):
                 supported_interfaces=[
                     AgentInterface(
                         url=f"http://127.0.0.1:{port}",
-                        protocol_bindings="JSONRPC",
+                        protocol_binding="JSONRPC",
                         protocol_version="1.0"
                     )
                 ],
                 capabilities=AgentCapabilities(streaming=False),
                 default_input_modes=["text/plain"],
-                defualt_output_modes=["text/plain"],
+                default_output_modes=["text/plain"],
                 skills=[
                     AgentSkill(
                         id="task-task",

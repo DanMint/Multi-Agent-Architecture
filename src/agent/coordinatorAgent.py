@@ -81,9 +81,9 @@ class TaskAssignment(BaseModel):
     )
 
 class CoordinatorAgent(BaseAgent):
-    def __init__(self, model: str, system_prompt: str, agent_prompt: str, agent_id: int, agent_name: str, temperature: float = 0.0, workers: dict[str, AgentDiscoveryInfo] | None = None):
+    def __init__(self, model: str, system_prompt: str, agent_prompt: str, agent_id: int, agent_name: str, description: str, temperature: float = 0.0, workers: dict[str, AgentDiscoveryInfo] | None = None):
         print(f"Agent id: {agent_id}")
-        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id, coordinator=True, agent_name=agent_name)
+        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id, coordinator=True, agent_name=agent_name, description=description)
         # Available worker agents
         self.workers =  workers or {}
 
@@ -137,6 +137,7 @@ class CoordinatorAgent(BaseAgent):
 
         for agent in data["agents"]:
             if agent.get("agent_name") != "coordinator":
+                print(agent.get("agent_name"))
                 self.workers[agent.get("agent_name")] = AgentDiscoveryInfo.model_validate(agent)
             
     async def plan_task(self, state: CoordinatorState):
@@ -224,7 +225,7 @@ class CoordinatorAgent(BaseAgent):
         await super().initialize()
 
 async def main():
-    c1 = await CoordinatorAgent.create(model="llama3.1:8b", temperature=0, system_prompt='AA', agent_prompt="", agent_id=3, agent_name="coordinator")
+    c1 = await CoordinatorAgent.create(model="llama3.1:8b", temperature=0, system_prompt='AA', agent_prompt="", agent_id=3, agent_name="coordinator", description="Coordinator agent responsible for selecting appropriate agents for tasks, and orchestrating task execution through A2A communication")
     ans = await c1.communicate(prompt="Find me the best stocks to buy")
     print(ans)
 
