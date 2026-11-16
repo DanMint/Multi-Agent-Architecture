@@ -29,8 +29,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest fastapi httpx uvicorn langchain langchain-ollama
-      
+          python -m pip install \
+            "a2a-sdk[fastapi]" \
+            uvicorn \
+            "langchain[mcp]>=1.4.0" \
+            langchain-ollama \
+            fastmcp \
+            ddgs \
+            trafilatura \
+            httpx \
+            "pydantic>=2.0" \
+            pytest \
+            pytest-asyncio
+
       - name: Run base agent tests
         run: python -m pytest tests/test_base_agent.py -v
         
