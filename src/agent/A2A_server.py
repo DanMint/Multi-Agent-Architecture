@@ -16,6 +16,46 @@ from a2a.server.routes import (
     create_jsonrpc_routes
 )
 
+
+"""
+A2AServer: Handles incoming Agent-to-Agent (A2A) requests and enables
+remote communication with agents within the multi-agent architecture.
+
+    Inherits from AgentExecutor to process A2A requests and execute
+    tasks using the associated agent's communication interface.
+
+    Attributes:
+        - agent: Local agent responsible for executing incoming tasks.
+        - port: HTTP port on which the A2A server operates.
+        - card: Agent Card containing identity, capabilities, and endpoints.
+        - handler: A2A request handler responsible for processing requests.
+        - app: FastAPI application exposing Agent Card and JSON-RPC routes.
+        - server: Uvicorn server instance.
+        - server_task: Asynchronous task managing the server lifecycle.
+
+    Methods:
+        - __init__(agent, port): Initializes the Agent Card, A2A request
+          handler, FastAPI routes, and server configuration.
+
+        - execute(context, event_queue): Receives an A2A message, delegates
+          execution to the local agent, and returns the response through
+          the event queue.
+
+        - cancel(context, event_queue): Handles task cancellation.
+          Currently not implemented.
+
+        - start(): Starts the Uvicorn server asynchronously and waits
+          until it is ready to accept incoming requests.
+
+        - stop(): Shuts down the Uvicorn server and releases resources
+          associated with the A2A request handler.
+
+    Note:
+        Supports JSON-RPC communication with text-based messages.
+        Streaming and task cancellation are not currently supported.
+        Uses an in-memory task store without persistent storage.
+"""
+
 class A2AServer(AgentExecutor):
     def __init__(self, agent, port):
         self.agent = agent
@@ -82,7 +122,7 @@ class A2AServer(AgentExecutor):
             role=Role.ROLE_AGENT
         )
 
-        await event_queue.enqeue_event(response)
+        await event_queue.enqueue_event(response)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         raise NotImplementedError("Cancellation not supported")

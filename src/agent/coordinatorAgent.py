@@ -8,59 +8,78 @@ import asyncio
 import httpx
 
 from src.agent.base import BaseAgent
+from src.agent.A2A_client import A2AClient
+
 from src.models.agent_discovery_info import AgentDiscoveryInfo
+
 
 
 """
 CoordinatorAgent: Central orchestration agent responsible for discovering,
-selecting, and delegating tasks to specialized worker agents.
+selecting, and delegating tasks to specialized worker agents using A2A communication.
 
     Inherits from BaseAgent for agent registration, heartbeat management,
     LLM configuration, and asynchronous initialization.
 
+    Uses LangGraph to manage task planning, worker selection, remote execution,
+    and response handling.
+
     Attributes:
-        - workers: Dictionary of available worker agents, populated from
+        - workers: Dictionary of available worker metadata retrieved from
           the Agent Registry using AgentDiscoveryInfo models.
+        - a2a_client: A2AClient instance responsible for communicating with
+          remote worker agents.
         - llm: Ollama model used for task planning and worker selection.
         - planner: Structured LLM planner that generates TaskAssignment objects.
         - graph: LangGraph workflow managing task planning and execution.
 
     Data Models:
-        - CoordinatorState: Stores the current task, selected worker,
-          execution results, errors, and final response.
+        - CoordinatorState: Stores the user request, selected worker,
+          assigned task, execution results, errors, and final response.
         - TaskAssignment: Defines the selected worker and assigned task
           using Pydantic for structured LLM output.
 
     Methods:
-        - __init__(): Initializes the Coordinator and constructs its
-          LangGraph workflow.
+        - __init__(): Initializes the Coordinator, A2A client, LLM planner,
+          and LangGraph workflow.
 
         - get_current_agents(): Asynchronously retrieves available workers
           from the Agent Registry and populates the workers dictionary.
 
-        - plan_task(state): Uses the LLM to select a worker and generate a task.
+        - plan_task(state): Uses the LLM to select an available worker
+          and generate task instructions.
 
-        - select_worker(state): Verifies that the selected worker exists.
+        - select_worker(state): Verifies that the selected worker exists
+          in the discovered workers dictionary.
 
-        - route_task(state): Routes execution to the worker or finish node.
+        - route_task(state): Routes execution to the worker or finish node
+          based on the current error state.
 
-        - execute_worker(state): Attempts to execute the task using the
-          selected worker and captures results or errors.
+        - execute_worker(state): Sends the assigned task to the selected
+          remote worker through A2A and captures its response or errors.
 
         - finish(state): Produces the final response or execution error.
 
-        - communicate(prompt): Executes the LangGraph workflow for a request.
+        - communicate(prompt): Executes the LangGraph workflow for a
+          user request and returns the final response.
 
-        - initialize(): Discovers workers, registers the Coordinator,
-          and starts heartbeat transmission.
+        - initialize(): Discovers available workers, registers the
+          Coordinator with the Registry, and starts heartbeat transmission.
 
         - main(): Creates the Coordinator using the inherited asynchronous
           factory method and executes a sample task.
 
     Note:
-        Remote agent-to-agent communication is not yet implemented.
-        Discovered workers are metadata objects (AgentDiscoveryInfo),
-        not executable agent instances.
+        Worker discovery is handled by the Agent Registry, while remote
+        communication is performed through the A2A protocol using each
+        worker's Agent Card URL.
+
+        Workers are represented by AgentDiscoveryInfo metadata objects,
+        rather than local agent instances.
+
+        Currently supports single-worker task delegation with direct
+        text responses. Multi-worker orchestration and task-based A2A
+        responses are not yet implemented.
 """
 
 class CoordinatorState(TypedDict):
@@ -86,6 +105,9 @@ class CoordinatorAgent(BaseAgent):
         super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agent_prompt, agent_id=agent_id, coordinator=True, agent_name=agent_name, description=description)
         # Available worker agents
         self.workers =  workers or {}
+
+        # Set up A2A client
+        self.a2a_client = A2AClient()
 
         # Coordinator's LLM
         self.llm = ChatOllama(
@@ -129,6 +151,7 @@ class CoordinatorAgent(BaseAgent):
         self.graph = workflow.compile()
 
     async def get_current_agents(self) -> None:
+        print("getting them boy!!!")
         async with httpx.AsyncClient(timeout=0.5) as client:
             response = await client.get(self.agent_info.registry_get_all_agents) 
             response.raise_for_status()
@@ -187,9 +210,12 @@ class CoordinatorAgent(BaseAgent):
         worker = self.workers[state["worker_name"]]
 
         try:
-            response = await worker.communicate(state["task"])
-            result = response["messages"][-1].content
-            return {"worker_result": str(result)}
+            result = await self.a2a_client.send_message(
+                agent_card_url=str(worker.agent_card_url),
+                prompt=state["task"]
+            )
+
+            return {"worker_result": result}
 
         except Exception as exc:
             return {
@@ -225,7 +251,7 @@ class CoordinatorAgent(BaseAgent):
         await super().initialize()
 
 async def main():
-    c1 = await CoordinatorAgent.create(model="llama3.1:8b", temperature=0, system_prompt='AA', agent_prompt="", agent_id=3, agent_name="coordinator", description="Coordinator agent responsible for selecting appropriate agents for tasks, and orchestrating task execution through A2A communication")
+    c1 = await CoordinatorAgent.create(model="llama3.1:8b", temperature=0, system_prompt='AA', agent_prompt="", agent_id=1, agent_name="coordinator", description="Coordinator agent responsible for selecting appropriate agents for tasks, and orchestrating task execution through A2A communication")
     ans = await c1.communicate(prompt="Find me the best stocks to buy")
     print(ans)
 

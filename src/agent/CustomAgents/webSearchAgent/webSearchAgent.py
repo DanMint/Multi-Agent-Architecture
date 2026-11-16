@@ -7,39 +7,60 @@ from typing import override
 from langchain.mcp import MCPAdapter
 from langchain.agents import create_agent
 
+
 """
 ResearchAgent: Specialized worker agent responsible for web research,
 webpage retrieval, and information gathering within the multi-agent architecture.
 
-    Inherits from BaseAgent to reuse agent registration, heartbeat management,
-    LLM configuration, and asynchronous initialization.
+    Inherits from BaseAgent to reuse LLM configuration, Agent Registry
+    registration, heartbeat management, and A2A server initialization.
+
+    Uses MCP (Model Context Protocol) to discover and execute external
+    research tools, and A2A (Agent-to-Agent) to receive tasks from the
+    CoordinatorAgent and return research results.
 
     Attributes:
         - MCP_server: HTTP endpoint of the MCP server providing research tools.
-        - tools: List of tools discovered from the MCP server.
+        - tools: List of available tools discovered from the MCP server.
+        - agent: LangChain agent configured with the LLM, system prompt,
+          and discovered MCP tools.
         - capabilities: Agent capabilities, currently ["web_search"].
-        - max_concurrent_tasks: Maximum number of concurrent tasks (currently 1).
+        - max_concurrent_tasks: Advertised maximum concurrent tasks,
+          currently set to 1.
 
     Methods:
-        - __init__(): Initializes the agent, MCP configuration, and capabilities.
+        - __init__(): Initializes the BaseAgent, MCP server configuration,
+          agent capabilities, and maximum task capacity.
 
-        - get_mcp_tools(): Asynchronously connects to the MCP server and
-          retrieves available research tools.
+        - get_mcp_tools(): Asynchronously connects to the MCP server
+          and discovers available research tools.
+
+        - communicate(prompt): Asynchronously executes a research request
+          using the LangChain agent and its MCP tools, returning the
+          resulting agent state.
 
         - initialize(): Discovers MCP tools, creates the LangChain agent,
-          registers with the Agent Registry, and starts heartbeat transmission.
-
-        - communicate(prompt): Asynchronously sends a prompt to the
-          LangChain agent and returns its response.
+          and invokes BaseAgent initialization to start the A2A server,
+          register with the Agent Registry, and start heartbeat transmission.
 
         - main(): Creates the ResearchAgent using the inherited asynchronous
-          factory method and executes a sample research task.
+          factory method and keeps it running to receive A2A requests.
+
+    Note:
+        Research tasks are received through the A2A server initialized
+        by BaseAgent, which delegates execution to communicate().
+
+        The ResearchAgent uses MCP for external tool access and A2A for
+        communication with the CoordinatorAgent.
+
+        Currently advertises support for one concurrent task and provides
+        web_search and fetch_webpage tools through the MCP server.
 """
 
 class ResearchAgent(BaseAgent):
-    def __init__(self, model: str, temperature: str, agent_id: int, agent_name: str, system_prompt: str ="You are a worker agent. Listen to the coordinator", agnet_prompt:str = "..."):
+    def __init__(self, model: str, temperature: str, agent_id: int, agent_name: str, description: str,system_prompt: str ="You are a worker agent. Listen to the coordinator", agnet_prompt:str = "..."):
         print(f"Agent id: {agent_id}")
-        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agnet_prompt, agent_id=agent_id, coordinator=False, agent_name=agent_name)
+        super().__init__(model=model, temperature=temperature, system_prompt=system_prompt, agent_prompt=agnet_prompt, agent_id=agent_id, coordinator=False, agent_name=agent_name, description=description)
 
         self.MCP_server = "http://127.0.0.1:8001/mcp"
         self.tools = []
@@ -179,18 +200,13 @@ async def main():
         simply summarizing search snippets.
     """
 
-    w1 = await ResearchAgent.create(model="llama3.1:8b", temperature=0, agent_id=2, system_prompt=WEB_SEARCH_SYSTEM_PROMPT, agent_name = "Web_Search")
-    response = await w1.communicate(
-        "Conduct research in the best index funds and ETFs to buy today"
-    )
+    description = "You are an online web search agent"
 
-    # Inspect actual tool calls
-    for message in response["messages"]:
-        if message.type == "tool":
-            print("Tool executed:", message.name)
-            print("Tool result:", message.content)
+    w1 = await ResearchAgent.create(model="llama3.1:8b", temperature=0, agent_id=2, system_prompt=WEB_SEARCH_SYSTEM_PROMPT, agent_name = "Web_Search", description=description)
 
-    print("Final answer:", response["messages"][-1].content)
+    print("Web Search Agent is running and waiting for A2A requests")
+
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(main())
