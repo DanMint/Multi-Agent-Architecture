@@ -1,9 +1,8 @@
-
 """
     Test Suite: CoordinatorAgent
 
-    Tests the Coordinator Agent's initialization, worker discovery,
-    task planning, selection, execution, and LangGraph workflow.
+    Tests CoordinatorAgent registration, discovery, planning, worker
+    selection, A2A metadata contracts, and LangGraph orchestration.
 
     1. Sets up pytest fixtures:
         - Mocks the Ollama model and structured LLM planner.
@@ -32,7 +31,7 @@
     5. Tests worker execution:
         - Simulates successful worker communication.
         - Verifies execution errors are captured.
-        - Tests the current AgentDiscoveryInfo limitation.
+        - Validates A2A Agent Card discovery information.
 
     6. Tests the LangGraph workflow:
         - Executes the complete planning and routing process.
@@ -40,14 +39,14 @@
         - Verifies final responses.
 
     Note:
-        External services are mocked, but the real LangGraph
-        workflow is used. Remote A2A communication is not yet
-        implemented in the Coordinator.
+        Registry/Ollama/heartbeat dependencies are mocked, while the real
+        LangGraph is exercised. Graph integration tests mock the A2A
+        execution boundary; they do NOT validate the A2A SDK transport.
+        Add transport-specific tests against the actual coordinator client.
 """
 
 import asyncio
 
-from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock, MagicMock, call
 
 import httpx
@@ -133,18 +132,21 @@ def mock_dependencies(monkeypatch):
         {
             "agent_id": 2,
             "agent_name": "Web_Search",
+            "agent_card_url": "http://127.0.0.1:8008/.well-known/agent-card.json",
             "status": "active",
             "max_concurrent_tasks": 1
         },
         {
             "agent_id": 4,
             "agent_name": "Document_Agent",
+            "agent_card_url": "http://127.0.0.1:8009/.well-known/agent-card.json",
             "status": "active",
             "max_concurrent_tasks": 2
         },
         {
             "agent_id": 3,
             "agent_name": "coordinator",
+            "agent_card_url": "http://127.0.0.1:8010/.well-known/agent-card.json",
             "status": "active",
             "max_concurrent_tasks": None
         }
@@ -249,7 +251,8 @@ def coordinator(mock_dependencies):
         system_prompt="You are a coordinator.",
         agent_prompt="Delegate tasks to worker agents.",
         agent_id=3,
-        agent_name="coordinator"
+        agent_name="coordinator",
+        description="You are a coordinator agent"
     )
 
 
@@ -369,6 +372,7 @@ def test_get_current_agents(coordinator, mock_dependencies):
     assert isinstance(web_agent, AgentDiscoveryInfo)
 
     assert web_agent.agent_id == 2
+    assert str(web_agent.agent_card_url) == "http://127.0.0.1:8008/.well-known/agent-card.json"
     assert web_agent.agent_name == "Web_Search"
     assert web_agent.status == "active"
     assert web_agent.max_concurrent_tasks == 1
@@ -409,6 +413,7 @@ def test_get_current_agents_invalid_data(
             {
                 "agent_id": "invalid",
                 "agent_name": "Web_Search",
+                "agent_card_url": "http://127.0.0.1:8008/.well-known/agent-card.json",
                 "status": "active",
                 "max_concurrent_tasks": 1
             }
@@ -523,7 +528,8 @@ def test_coordinator_async_factory(mock_dependencies):
             system_prompt="You are a coordinator.",
             agent_prompt="Delegate tasks.",
             agent_id=3,
-            agent_name="coordinator"
+            agent_name="coordinator",
+            description="Coordinator agent"
         )
     )
 
@@ -659,94 +665,34 @@ def test_route_task(coordinator):
 # Worker Execution Tests
 # ============================================================
 
-def test_execute_worker_current_limitation(
-    coordinator, mock_dependencies
-):
-    """
-    Verify current behavior when executing a discovered worker.
-
-    AgentDiscoveryInfo contains metadata and does not implement
-    communicate(). The Coordinator should capture the error.
-    """
-
+def test_discovered_worker_has_a2a_card(coordinator, mock_dependencies):
+    """Worker discovery supplies a valid Agent Card URL for A2A."""
     asyncio.run(coordinator.get_current_agents())
 
-    state = create_state(
-        worker_name="Web_Search",
-        task="Research index funds"
-    )
-
-    result = asyncio.run(coordinator.execute_worker(state))
-
-    assert "error" in result
-
-    assert "Worker failed:" in result["error"]
-    assert "AgentDiscoveryInfo" in result["error"]
-    assert "communicate" in result["error"]
+    worker = coordinator.workers["Web_Search"]
+    assert isinstance(worker, AgentDiscoveryInfo)
+    assert str(worker.agent_card_url).startswith("http://127.0.0.1:8008/")
 
 
-def test_execute_worker_mock_success(coordinator):
-    """
-    Verify the successful execution branch with a mock worker.
-
-    A temporary worker stub is used because remote HTTP/A2A
-    communication has not yet been implemented.
-    """
-
-    mock_worker = SimpleNamespace(
-        communicate=AsyncMock(
-            return_value={
-                "messages": [
-                    SimpleNamespace(
-                        content="Research completed successfully."
-                    )
-                ]
-            }
-        )
-    )
-
-    # Test-only executable worker stub.
-    coordinator.workers["Web_Search"] = mock_worker
-
-    state = create_state(
-        worker_name="Web_Search",
-        task="Research index funds"
-    )
-
-    result = asyncio.run(coordinator.execute_worker(state))
-
-    mock_worker.communicate.assert_awaited_once_with(
-        "Research index funds"
-    )
-
-    assert result == {
-        "worker_result": "Research completed successfully."
+def test_discovery_rejects_missing_agent_card(coordinator, mock_dependencies):
+    """An A2A worker without an Agent Card cannot be discovered."""
+    mock_dependencies["get_response"].json.return_value = {
+        "agents": [{
+            "agent_id": 2,
+            "agent_name": "Web_Search",
+            "status": "active",
+            "max_concurrent_tasks": 1,
+        }]
     }
+    with pytest.raises(ValidationError, match="agent_card_url"):
+        asyncio.run(coordinator.get_current_agents())
 
 
-def test_execute_worker_failure(coordinator):
-    """
-    Verify that worker execution exceptions are captured.
-    """
-
-    mock_worker = SimpleNamespace(
-        communicate=AsyncMock(
-            side_effect=RuntimeError("Worker unavailable")
-        )
-    )
-
-    coordinator.workers["Web_Search"] = mock_worker
-
-    state = create_state(
-        worker_name="Web_Search",
-        task="Research index funds"
-    )
-
-    result = asyncio.run(coordinator.execute_worker(state))
-
-    assert result == {
-        "error": "Worker failed: Worker unavailable"
-    }
+def test_discovery_rejects_bad_agent_card_url(coordinator, mock_dependencies):
+    """Pydantic rejects a malformed Agent Card URL."""
+    mock_dependencies["registry_agents"][0]["agent_card_url"] = "not-a-url"
+    with pytest.raises(ValidationError, match="agent_card_url"):
+        asyncio.run(coordinator.get_current_agents())
 
 
 # ============================================================
@@ -790,47 +736,32 @@ def test_finish_failure(coordinator):
 # LangGraph Integration Tests
 # ============================================================
 
-def test_langgraph_workflow_success(
-    coordinator, mock_dependencies
-):
+def test_langgraph_workflow_success(mock_dependencies, monkeypatch):
+    """Exercise the compiled graph with the A2A execution boundary mocked.
+
+    Important: replace the node BEFORE graph compilation. This tests
+    planning/routing/result propagation, not HTTP/JSON-RPC transport.
     """
-    Test the complete LangGraph workflow with a mock worker.
-
-    Workflow:
-        START -> plan -> select -> execute -> finish -> END
-
-    Verifies the complete graph without a real remote agent.
-    """
-
-    mock_worker = SimpleNamespace(
-        communicate=AsyncMock(
-            return_value={
-                "messages": [
-                    SimpleNamespace(
-                        content="Here are the research findings."
-                    )
-                ]
-            }
-        )
+    mock_a2a_execution = AsyncMock(return_value={
+        "worker_result": "Here are the research findings."
+    })
+    monkeypatch.setattr(CoordinatorAgent, "execute_worker", mock_a2a_execution)
+    agent = CoordinatorAgent(
+        model="llama3.1:8b", temperature=0,
+        system_prompt="You are a coordinator.",
+        agent_prompt="Delegate tasks to worker agents.",
+        agent_id=3, agent_name="coordinator",
+        description="Coordinator agent"
     )
-
-    coordinator.workers["Web_Search"] = mock_worker
-
-    response = asyncio.run(
-        coordinator.communicate(
-            "Find the best index funds"
-        )
+    agent.workers["Web_Search"] = AgentDiscoveryInfo.model_validate(
+        mock_dependencies["registry_agents"][0]
     )
-
+    response = asyncio.run(agent.communicate("Find the best index funds"))
     assert response == "Here are the research findings."
-
-    mock_dependencies[
-        "planner"
-    ].ainvoke.assert_awaited_once()
-
-    mock_worker.communicate.assert_awaited_once_with(
-        "Research the best index funds"
-    )
+    mock_a2a_execution.assert_awaited_once()
+    state = mock_a2a_execution.await_args.args[0]
+    assert state["worker_name"] == "Web_Search"
+    assert state["task"] == "Research the best index funds"
 
 
 def test_langgraph_workflow_invalid_worker(
@@ -861,25 +792,25 @@ def test_langgraph_workflow_invalid_worker(
     assert response == "No available worker: UnknownAgent"
 
 
-def test_langgraph_workflow_discovery_limitation(
-    coordinator, mock_dependencies
-):
-    """
-    Verify the complete graph handles the current limitation
-    where discovered workers are AgentDiscoveryInfo objects.
-    """
-
-    asyncio.run(coordinator.get_current_agents())
-
-    response = asyncio.run(
-        coordinator.communicate(
-            "Find the best index funds"
-        )
+def test_langgraph_workflow_a2a_failure(mock_dependencies, monkeypatch):
+    """An A2A execution error is surfaced as the graph's final answer."""
+    mock_a2a_execution = AsyncMock(return_value={
+        "error": "Worker failed: A2A endpoint unavailable"
+    })
+    monkeypatch.setattr(CoordinatorAgent, "execute_worker", mock_a2a_execution)
+    agent = CoordinatorAgent(
+        model="llama3.1:8b", temperature=0,
+        system_prompt="You are a coordinator.",
+        agent_prompt="Delegate tasks to worker agents.",
+        agent_id=3, agent_name="coordinator",
+        description="Coordinator agent"
     )
-
-    assert response.startswith("Worker failed:")
-    assert "AgentDiscoveryInfo" in response
-    assert "communicate" in response
+    agent.workers["Web_Search"] = AgentDiscoveryInfo.model_validate(
+        mock_dependencies["registry_agents"][0]
+    )
+    response = asyncio.run(agent.communicate("Find the best index funds"))
+    assert response == "Worker failed: A2A endpoint unavailable"
+    mock_a2a_execution.assert_awaited_once()
 
 
 # ============================================================

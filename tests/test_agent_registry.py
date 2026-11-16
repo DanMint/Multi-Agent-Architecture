@@ -63,28 +63,23 @@ def client(registry):
     with TestClient(registry.app) as test_client:
         yield test_client
 
-
 @pytest.fixture
 def agent1_data():
-    """Registration payload for the first agent."""
     return {
         "agent_id": 1,
         "agent_name": "Web_Search",
-        "agent_card_url": None,
+        "agent_card_url": "http://127.0.0.1:8008/.well-known/agent-card.json",
         "max_concurrent_tasks": 1
     }
 
-
 @pytest.fixture
 def agent2_data():
-    """Registration payload for the second agent."""
     return {
         "agent_id": 2,
         "agent_name": "Document_Agent",
-        "agent_card_url": None,
+        "agent_card_url": "http://127.0.0.1:8009/.well-known/agent-card.json",
         "max_concurrent_tasks": 2
     }
-
 
 # ============================================================
 # Agent Registration Tests
@@ -364,15 +359,13 @@ def test_get_all_agents_empty(client):
     assert response.json() == {"agents": []}
 
 
+
 def test_get_all_agents(client, registry, agent1_data, agent2_data):
     """
     Verify that the discovery endpoint returns the agents
     matching the registry's current 'active' filter.
-
-    The expected result is derived from each stored record's
-    actual status, so the test also supports a 'registered'
-    initial state, which is currently excluded by the endpoint.
     """
+
     response1 = client.post("/register", json=agent1_data)
     response2 = client.post("/register", json=agent2_data)
 
@@ -390,11 +383,13 @@ def test_get_all_agents(client, registry, agent1_data, agent2_data):
             expected_agents.append({
                 "agent_id": record.registration.agent_id,
                 "agent_name": record.registration.agent_name,
+                "agent_card_url": str(record.registration.agent_card_url),
                 "status": record.status,
                 "max_concurrent_tasks": None
             })
 
     assert response.json() == {"agents": expected_agents}
+
 
 
 def test_get_all_agents_excludes_non_active(client, registry, agent1_data, agent2_data):

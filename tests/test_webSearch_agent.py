@@ -1,5 +1,8 @@
+import asyncio
+
 import httpx
 import pytest
+import pytest_asyncio
 
 from unittest.mock import Mock, AsyncMock, MagicMock, call
 
@@ -9,68 +12,37 @@ import src.agent.base as base_module
 import src.agent.CustomAgents.webSearchAgent.webSearchAgent as webSearch_module
 
 """
-    Test Suite: ResearchAgent (WebSearchAgent)
+Test Suite: ResearchAgent (Web Search Worker)
 
-    Tests the ResearchAgent class, including MCP tool discovery,
-    asynchronous initialization, communication, and error handling.
+Tests construction, MCP discovery, agent initialization, Registry
+registration, asynchronous communication, and failure handling.
 
-    1. Sets up pytest fixtures:
-        - Mocks the Ollama model and ChatOllama constructor.
-        - Mocks the MCPAdapter and MCP server tools.
-        - Mocks LangChain's create_agent() and ainvoke().
-        - Mocks asynchronous HTTP registration with the Registry.
-        - Mocks the UDP heartbeat service.
+Architecture:
+    Coordinator --(A2A)--> ResearchAgent --(MCP)--> web_search/fetch_webpage
+                                       |
+                                       +--(HTTP)--> Agent Registry
+                                       +--(UDP)--> Registry heartbeat listener
 
-    2. Tests agent construction:
-        - Verifies agent metadata and configuration.
-        - Verifies MCP server URL.
-        - Verifies agent capabilities and task capacity.
-        - Ensures registration does not occur during __init__().
+Coverage:
+    - Mocked Ollama and LangChain agent configuration.
+    - Mocked MCPAdapter tool discovery and empty-tool handling.
+    - Async factory construction, initialization, and Registry registration.
+    - A2A Agent Card URL field forwarded in Registry registration.
+    - Agent communication and error propagation.
+    - MCP and Registry failures, including heartbeat behavior.
 
-    3. Tests MCP tool discovery:
-        - Connects to the mocked MCP server.
-        - Retrieves web_search and fetch_webpage tools.
-        - Verifies that tools are stored correctly.
-
-    4. Tests asynchronous initialization:
-        - Retrieves MCP tools.
-        - Creates the LangChain agent using discovered tools.
-        - Registers the agent with the Registry.
-        - Stores the Registry session ID.
-        - Starts the heartbeat service.
-
-    5. Tests the asynchronous factory method:
-        - Calls ResearchAgent.create().
-        - Verifies that the inherited BaseAgent.create()
-          executes the overridden initialize() method.
-        - Ensures the initialized agent is returned.
-
-    6. Tests agent communication:
-        - Sends user messages through ainvoke().
-        - Verifies the message format and response.
-
-    7. Tests failure handling:
-        - Handles MCP connection failures.
-        - Handles LLM invocation failures.
-        - Handles HTTP registration failures.
-        - Verifies heartbeat does not start on failed setup.
-
-    8. Tests empty MCP tool discovery:
-        - Simulates an MCP server returning no tools.
-        - Verifies the agent is created with an empty tool list.
-
-    Note:
-        All external dependencies are mocked.
-        Tests do not require Ollama, an MCP server,
-        or the Agent Registry to be running.
+Note:
+    This suite mocks all external services. It tests the ResearchAgent
+    internals and A2A discovery metadata, NOT an actual A2A client/server
+    message exchange. A real transport integration test is separate.
 """
 
 # ============================================================
 # Fixtures
 # ============================================================
 
-@pytest.fixture
-def mock_dependencies(monkeypatch):
+@pytest_asyncio.fixture
+async def mock_dependencies(monkeypatch):
     """
     Mock dependencies used by BaseAgent and ResearchAgent.
 
@@ -219,8 +191,32 @@ def mock_dependencies(monkeypatch):
         mock_heartbeat_class
     )
 
+    # Simulate a running Uvicorn A2A server without binding to a real port.
+    # ResearchAgent's A2A startup code waits for server.started == True.
+    # Returning immediately from serve() leaves started=False and causes
+    # RuntimeError("A2A server failed to start").
+    import uvicorn
+
+    server_tasks = []
+    mock_uvicorn_serve = Mock()
+
+    async def fake_uvicorn_serve(server, *args, **kwargs):
+        mock_uvicorn_serve(server, *args, **kwargs)
+        server.started = True
+        task = asyncio.current_task()
+        if task is not None:
+            server_tasks.append(task)
+        try:
+            # Keep the fake server running so A2A startup's readiness and
+            # task-liveness checks both succeed. No socket is opened.
+            await asyncio.Event().wait()
+        finally:
+            server.started = False
+
+    monkeypatch.setattr(uvicorn.Server, "serve", fake_uvicorn_serve)
+
     # Return dependencies for assertions
-    return {
+    yield {
         "model": mock_model,
         "chat_ollama": mock_chat_ollama,
         "agent": mock_agent,
@@ -232,8 +228,17 @@ def mock_dependencies(monkeypatch):
         "http_response": mock_http_response,
         "async_client": mock_async_client,
         "heartbeat": mock_heartbeat,
-        "heartbeat_class": mock_heartbeat_class
+        "heartbeat_class": mock_heartbeat_class,
+        "uvicorn_serve": mock_uvicorn_serve
     }
+
+    # Cleanup every simulated server task, preventing leaked tasks or warnings
+    # between tests. The async fixture shares the test's event loop.
+    for task in server_tasks:
+        if not task.done():
+            task.cancel()
+    if server_tasks:
+        await asyncio.gather(*server_tasks, return_exceptions=True)
 
 
 @pytest.fixture
@@ -251,7 +256,8 @@ def agent(mock_dependencies):
         agent_id=2,
         agent_name="Web_Search",
         system_prompt="You are a web search agent.",
-        agnet_prompt="Search the web for information."
+        agnet_prompt="Search the web for information.",
+        description="Specialized web research agent using MCP search and page retrieval tools."
     )
 
 # ============================================================
@@ -391,7 +397,9 @@ async def test_agent_initialization(agent, mock_dependencies):
 
     assert registration_data["agent_id"] == 2
     assert registration_data["agent_name"] == "Web_Search"
-    assert registration_data["agent_card_url"] is None
+    # The URL is supplied by the ResearchAgent's A2A initialization.
+    # Match the actual advertised URL rather than assuming that it is None.
+    assert registration_data["agent_card_url"] == agent.agent_info.agent_card_url
     assert registration_data["max_concurrent_tasks"] == 1
 
     mock_dependencies["http_response"].raise_for_status.assert_called_once()
@@ -401,6 +409,30 @@ async def test_agent_initialization(agent, mock_dependencies):
 
     # Verify heartbeat starts.
     mock_dependencies["heartbeat"].start.assert_called_once_with()
+
+# ============================================================
+# A2A Discovery Metadata Tests
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_registration_advertises_configured_agent_card(agent, mock_dependencies):
+    """Registration forwards a configured A2A Agent Card URL to the Registry.
+
+    This checks discovery metadata only; it does not start an A2A server.
+    """
+    card_url = "http://127.0.0.1:8008/.well-known/agent-card.json"
+    agent.agent_info.agent_card_url = card_url
+
+    # Exercise BaseAgent's registration contract separately from ResearchAgent
+    # initialization, which may provision its own A2A server and URL.
+    await agent.register_agent(card_url)
+
+    payload = mock_dependencies["http_client"].post.await_args.kwargs["json"]
+    assert payload["agent_id"] == 2
+    assert payload["agent_name"] == "Web_Search"
+    assert payload["agent_card_url"] == card_url
+    assert agent.agent_info.session_id == "web-search-session-123"
+
 
 # ============================================================
 # Async Factory Method Tests
@@ -425,7 +457,8 @@ async def test_agent_async_factory(mock_dependencies):
         agent_id=2,
         agent_name="Web_Search",
         system_prompt="You are a web search agent.",
-        agnet_prompt="Search the web for information."
+        agnet_prompt="Search the web for information.",
+        description="Specialized web research agent using MCP search and page retrieval tools."
     )
 
     # Verify returned instance.

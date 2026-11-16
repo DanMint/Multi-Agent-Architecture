@@ -23,6 +23,7 @@ from src.agent.base import BaseAgent
         - Mocks LangChain's create_agent() and ainvoke().
         - Mocks asynchronous HTTP requests to the Agent Registry.
         - Mocks the UDP heartbeat service.
+        - Mocks the A2A server to avoid starting Uvicorn.
         - Creates a BaseAgent instance for testing.
 
     2. Tests agent construction:
@@ -59,7 +60,7 @@ from src.agent.base import BaseAgent
     Note:
         All external dependencies are mocked.
         Tests do not require Ollama, the Agent Registry,
-        or the UDP heartbeat server to be running.
+        the UDP heartbeat server, or an A2A server to be running.
 """
 
 # ============================================================
@@ -76,6 +77,7 @@ def mock_dependencies(monkeypatch):
     3. Mock httpx.AsyncClient and asynchronous HTTP POST.
     4. Mock Registry response containing a session ID.
     5. Mock Heartbeat constructor and service methods.
+    6. Mock A2AServer to prevent opening a real network port.
     """
     # Mock Ollama model
     mock_model = Mock()
@@ -146,6 +148,12 @@ def mock_dependencies(monkeypatch):
         return_value=mock_heartbeat
     )
 
+    # Mock the A2A server. Unit tests should not bind to port 8008.
+    mock_a2a_server = Mock()
+    mock_a2a_server.start = AsyncMock()
+    mock_a2a_server.stop = AsyncMock()
+    mock_a2a_server_class = Mock(return_value=mock_a2a_server)
+
     # Apply monkeypatches
     monkeypatch.setattr(
         base_module,
@@ -171,6 +179,12 @@ def mock_dependencies(monkeypatch):
         mock_heartbeat_class
     )
 
+    monkeypatch.setattr(
+        base_module,
+        "A2AServer",
+        mock_a2a_server_class
+    )
+
     return {
         "model": mock_model,
         "chat_ollama": mock_chat_ollama,
@@ -180,7 +194,9 @@ def mock_dependencies(monkeypatch):
         "http_client": mock_http_client,
         "http_response": mock_http_response,
         "heartbeat": mock_heartbeat,
-        "heartbeat_class": mock_heartbeat_class
+        "heartbeat_class": mock_heartbeat_class,
+        "a2a_server": mock_a2a_server,
+        "a2a_server_class": mock_a2a_server_class
     }
 
 
@@ -199,7 +215,8 @@ def agent(mock_dependencies):
         system_prompt="You are a helpful assistant",
         agent_prompt="Test agent prompt",
         agent_id=1,
-        agent_name="TestAgent"
+        agent_name="TestAgent",
+        description="You are the base agent"
     )
 
 
@@ -274,8 +291,9 @@ def test_agent_initialization(agent, mock_dependencies):
     # Registration should not happen during __init__().
     mock_dependencies["async_client"].assert_not_called()
 
-    # Heartbeat should not start during __init__().
+    # Heartbeat and A2A server should not start during __init__().
     mock_dependencies["heartbeat"].start.assert_not_called()
+    mock_dependencies["a2a_server_class"].assert_not_called()
 
 
 # ============================================================
@@ -350,6 +368,16 @@ def test_agent_async_initialize(agent, mock_dependencies):
     """
     asyncio.run(agent.initialize())
 
+    # Verify A2A server creation and startup without opening a real port.
+    mock_dependencies["a2a_server_class"].assert_called_once_with(
+        agent=agent,
+        port=8008
+    )
+    mock_dependencies["a2a_server"].start.assert_awaited_once_with()
+    assert str(agent.agent_info.agent_card_url) == (
+        "http://127.0.0.1:8008/.well-known/agent-card.json"
+    )
+
     # Verify registration HTTP request.
     mock_dependencies[
         "http_client"
@@ -385,7 +413,8 @@ def test_agent_async_factory(mock_dependencies):
             system_prompt="You are a helpful assistant",
             agent_prompt="Test agent prompt",
             agent_id=2,
-            agent_name="FactoryAgent"
+            agent_name="FactoryAgent",
+            description="You are a base agent"
         )
     )
 
@@ -403,10 +432,11 @@ def test_agent_async_factory(mock_dependencies):
         "http_client"
     ].post.assert_awaited_once()
 
-    # Verify heartbeat started during initialization.
+    # Verify heartbeat and A2A server started during initialization.
     mock_dependencies[
         "heartbeat"
     ].start.assert_called_once_with()
+    mock_dependencies["a2a_server"].start.assert_awaited_once_with()
 
 
 def test_async_factory_subclass_override(mock_dependencies):
@@ -427,7 +457,8 @@ def test_async_factory_subclass_override(mock_dependencies):
             system_prompt="Test",
             agent_prompt="Test worker",
             agent_id=3,
-            agent_name="WorkerAgent"
+            agent_name="WorkerAgent",
+            description="You are a test agent"
         )
     )
 
@@ -530,7 +561,8 @@ def test_coordinator_mode(mock_dependencies):
         agent_prompt="Coordinate worker agents",
         agent_id=5,
         agent_name="coordinator",
-        coordinator=True
+        coordinator=True,
+        description="You are a base agent"
     )
 
     assert coordinator.agent_info.agent_id == 5
@@ -609,7 +641,8 @@ def test_async_factory_registration_failure(mock_dependencies):
                 system_prompt="Test",
                 agent_prompt="Test prompt",
                 agent_id=6,
-                agent_name="FailedAgent"
+                agent_name="FailedAgent",
+                description="Agent for testing registration failures"
             )
         )
 

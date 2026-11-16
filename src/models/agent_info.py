@@ -100,12 +100,13 @@ class AgentInfo(BaseModel):
     # identification and information
     agent_id: int
     agent_name: str
+    description: str
+    version: str
     capabilities: list[str] | None
     llm_model: str
     llm_temperature: int
     system_prompt: str
     agent_prompt: str
-    agent_card_url: str | None
 
     # registry information
     registry_url: str
@@ -114,12 +115,9 @@ class AgentInfo(BaseModel):
     registry_get_agent_amount_url: str
     registry_get_all_agents: str
 
-    # agent to agent communication
-    endpoint: str | None
-
-    # udp heartbeat listener
-    udp_host: str | None
-    udp_port: int | None
+    # A2A agent card url
+    agent_card_url: str | None
+    agent_A2A_endpoint: str | None
 
     # runtime metadata
     session_id: str | None
